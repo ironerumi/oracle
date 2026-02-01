@@ -42,7 +42,7 @@ Add Perplexity as direct provider with sonar, sonar-pro, sonar-reasoning-pro, so
   - Acceptance: Can stream response from Perplexity API with usage tokens
   - Evidence: Manual test with `PERPLEXITY_API_KEY`
 
-- [ ] S1-3b: Add perplexity unit tests
+- [x] S1-3b: Add perplexity unit tests
   - Depends on: S1-3
   - Create `tests/oracle/perplexity.test.ts`
   - Test: `buildMessages()`, response adaptation, error handling (401, 429, OracleTransportError), SSE parsing, finalResponse usage, base URL normalization
