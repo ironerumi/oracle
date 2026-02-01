@@ -93,6 +93,7 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
   const hasAnthropicKey = Boolean(optionsApiKey) || Boolean(process.env.ANTHROPIC_API_KEY);
   const hasGeminiKey = Boolean(optionsApiKey) || Boolean(process.env.GEMINI_API_KEY);
   const hasXaiKey = Boolean(optionsApiKey) || Boolean(process.env.XAI_API_KEY);
+  const hasPerplexityKey = Boolean(optionsApiKey) || Boolean(process.env.PERPLEXITY_API_KEY);
 
   let baseUrl = options.baseUrl?.trim();
   if (!baseUrl) {
@@ -100,6 +101,8 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
       baseUrl = resolvedXaiBaseUrl;
     } else if (provider === 'anthropic') {
       baseUrl = process.env.ANTHROPIC_BASE_URL?.trim();
+    } else if (provider === 'perplexity') {
+      baseUrl = process.env.PERPLEXITY_BASE_URL?.trim();
     } else {
       baseUrl = process.env.OPENAI_BASE_URL?.trim();
     }
@@ -109,8 +112,10 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
     (provider === 'anthropic' && !hasAnthropicKey) ||
     (provider === 'google' && !hasGeminiKey) ||
     (provider === 'xai' && !hasXaiKey) ||
+    (provider === 'perplexity' && !hasPerplexityKey) ||
     provider === 'other';
-  const openRouterFallback = providerKeyMissing && Boolean(openRouterApiKey);
+  // Perplexity should NOT fall back to OpenRouter - require PERPLEXITY_API_KEY explicitly
+  const openRouterFallback = providerKeyMissing && provider !== 'perplexity' && Boolean(openRouterApiKey);
   if (!baseUrl || openRouterFallback) {
     if (openRouterFallback) {
       baseUrl = defaultOpenRouterBase;
@@ -135,6 +140,10 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
     if (isOpenRouterBaseUrl(baseUrl) || openRouterFallback) {
       return { key: optionsApiKey ?? openRouterApiKey, source: 'OPENROUTER_API_KEY' };
     }
+    // Check known Perplexity models by provider config (NOT prefix) - ensures A9 compliance
+    if (knownModelConfig?.provider === 'perplexity') {
+      return { key: optionsApiKey ?? process.env.PERPLEXITY_API_KEY, source: 'PERPLEXITY_API_KEY' };
+    }
     if (typeof model === 'string' && model.startsWith('gpt')) {
       if (optionsApiKey) return { key: optionsApiKey, source: 'apiKey option' };
       if (isAzureOpenAI) {
@@ -158,19 +167,22 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
   const apiKeyResult = getApiKeyForModel(options.model);
   const apiKey = apiKeyResult.key;
   if (!apiKey) {
+    // Use provider config check for Perplexity (NOT prefix) - ensures unknown sonar-* models suggest OPENROUTER_API_KEY
     const envVar = isOpenRouterBaseUrl(baseUrl) || openRouterFallback
       ? 'OPENROUTER_API_KEY'
-      : options.model.startsWith('gpt')
-        ? isAzureOpenAI
-          ? 'AZURE_OPENAI_API_KEY (or OPENAI_API_KEY)'
-          : 'OPENAI_API_KEY'
-        : options.model.startsWith('gemini')
-          ? 'GEMINI_API_KEY'
-          : options.model.startsWith('claude')
-            ? 'ANTHROPIC_API_KEY'
-            : options.model.startsWith('grok')
-              ? 'XAI_API_KEY'
-              : 'OPENROUTER_API_KEY';
+      : knownModelConfig?.provider === 'perplexity'
+        ? 'PERPLEXITY_API_KEY'
+        : options.model.startsWith('gpt')
+          ? isAzureOpenAI
+            ? 'AZURE_OPENAI_API_KEY (or OPENAI_API_KEY)'
+            : 'OPENAI_API_KEY'
+          : options.model.startsWith('gemini')
+            ? 'GEMINI_API_KEY'
+            : options.model.startsWith('claude')
+              ? 'ANTHROPIC_API_KEY'
+              : options.model.startsWith('grok')
+                ? 'XAI_API_KEY'
+                : 'OPENROUTER_API_KEY';
     throw new PromptValidationError(`Missing ${envVar}. Set it via the environment or a .env file.`, {
       env: envVar,
     });
@@ -605,12 +617,14 @@ export async function runOracle(options: RunOracleOptions, deps: RunOracleDeps =
   const reasoningTokens = usage.reasoning_tokens ?? 0;
   const totalTokens = usage.total_tokens ?? inputTokens + outputTokens + reasoningTokens;
   const pricing = modelConfig.pricing ?? undefined;
-  const cost = pricing
+  // Prefer upstream cost from API (e.g., Perplexity) over calculated cost
+  const upstreamCost = (response as { _upstream_cost_usd?: number })._upstream_cost_usd;
+  const cost = upstreamCost ?? (pricing
     ? estimateUsdCost({
         usage: { inputTokens, outputTokens, reasoningTokens, totalTokens },
         pricing: { inputUsdPerToken: pricing.inputPerToken, outputUsdPerToken: pricing.outputPerToken },
       })?.totalUsd
-    : undefined;
+    : undefined);
 
   const effortLabel = modelConfig.reasoning?.effort;
   const modelLabel = effortLabel ? `${modelConfig.model}[${effortLabel}]` : modelConfig.model;

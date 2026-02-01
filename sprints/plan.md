@@ -59,7 +59,7 @@ Add Perplexity as direct provider with sonar, sonar-pro, sonar-reasoning-pro, so
   - Acceptance: `sonar` routes to Perplexity; `sonar-invalid` does NOT
   - Evidence: `oracle -m sonar "test"` hits Perplexity; `oracle -m sonar-invalid "test"` errors/falls through
 
-- [ ] S1-5: Update run.ts for env/key/cost/fallback
+- [x] S1-5: Update run.ts for env/key/cost/fallback
   - Depends on: S1-4
   - Add `hasPerplexityKey` check at ~line 95
   - Add `(provider === 'perplexity' && !hasPerplexityKey)` to providerKeyMissing check ~line 107-112
