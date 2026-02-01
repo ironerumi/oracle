@@ -14,7 +14,7 @@ Add Perplexity as direct provider with sonar, sonar-pro, sonar-reasoning-pro, so
   - Evidence: `pnpm run build`
   - Note: types.ts compiles; full build requires S1-2 (Record<KnownModelName> needs all entries)
 
-- [ ] S1-2: Add model configs
+- [x] S1-2: Add model configs
   - Depends on: S1-1
   - Add 4 model configs to `MODEL_CONFIGS` in `config.ts`
   - Include for all: `provider: 'perplexity'`, `pricing: null`, `supportsBackground: false`, `supportsSearch: true`
