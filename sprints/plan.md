@@ -75,7 +75,7 @@ Add Perplexity as direct provider with sonar, sonar-pro, sonar-reasoning-pro, so
   - Acceptance: Missing key shows friendly error with PERPLEXITY_API_KEY for known models; cost displays from API; no OpenRouter fallback
   - Evidence: Run `sonar` without key (error mentioning PERPLEXITY_API_KEY), run `sonar-invalid` without key (error mentioning OPENROUTER_API_KEY)
 
-- [ ] S1-6: Update runOptions.ts for Perplexity baseUrl
+- [x] S1-6: Update runOptions.ts for Perplexity baseUrl
   - Depends on: S1-2
   - Update `src/cli/runOptions.ts` to NOT inherit `OPENAI_BASE_URL` for Perplexity models
   - Check `isKnownModel(model) && MODEL_CONFIGS[model].provider === 'perplexity'`

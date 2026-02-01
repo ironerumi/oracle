@@ -7,6 +7,7 @@ import { normalizeModelOption, inferModelFromLabel, resolveApiModel, normalizeBa
 import { resolveGeminiModelId } from '../oracle/gemini.js';
 import { PromptValidationError } from '../oracle/errors.js';
 import { normalizeChatGptModelForBrowser } from './browserConfig.js';
+import { isKnownModel } from '../oracle/modelResolver.js';
 
 export interface ResolveRunOptionsInput {
   prompt: string;
@@ -78,9 +79,11 @@ export function resolveRunOptionsFromConfig({
   const heartbeatIntervalMs =
     userConfig?.heartbeatSeconds !== undefined ? userConfig.heartbeatSeconds * 1000 : 30_000;
 
+  // Perplexity models should NOT inherit OPENAI_BASE_URL - run.ts fills from PERPLEXITY_BASE_URL
+  const isPerplexity = isKnownModel(resolvedModel) && MODEL_CONFIGS[resolvedModel]?.provider === 'perplexity';
   const baseUrl = normalizeBaseUrl(
     userConfig?.apiBaseUrl ??
-      (isClaude ? env.ANTHROPIC_BASE_URL : isGrok ? env.XAI_BASE_URL : env.OPENAI_BASE_URL),
+      (isPerplexity ? undefined : isClaude ? env.ANTHROPIC_BASE_URL : isGrok ? env.XAI_BASE_URL : env.OPENAI_BASE_URL),
   );
   const uniqueMultiModels: ModelName[] = normalizedRequestedModels.length > 0 ? allModels : [];
   const includesCodexMultiModel = uniqueMultiModels.some((entry) => entry.startsWith('gpt-5.1-codex'));
