@@ -25,7 +25,7 @@ Add Perplexity as direct provider with sonar, sonar-pro, sonar-reasoning-pro, so
   - Acceptance: `resolveKnownModelConfig('sonar')` returns config with provider 'perplexity' and supportsSearch true
   - Evidence: `pnpm test`
 
-- [ ] S1-3: Create perplexity.ts client
+- [x] S1-3: Create perplexity.ts client
   - Depends on: S1-1
   - Create `src/oracle/perplexity.ts` with `createPerplexityClient()` returning `ClientLike`
   - Implement `buildMessages()` for request adaptation (system + user messages)
