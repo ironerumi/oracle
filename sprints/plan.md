@@ -7,11 +7,12 @@ Add Perplexity as direct provider with sonar, sonar-pro, sonar-reasoning-pro, so
 
 ### Must Have
 
-- [ ] S1-1: Add Perplexity types
+- [x] S1-1: Add Perplexity types
   - Add `'perplexity'` to provider union (`ModelConfig.provider`) in `types.ts:47`
   - Add 4 model names to `KnownModelName` union
   - Acceptance: TypeScript compiles without errors
   - Evidence: `pnpm run build`
+  - Note: types.ts compiles; full build requires S1-2 (Record<KnownModelName> needs all entries)
 
 - [ ] S1-2: Add model configs
   - Depends on: S1-1
