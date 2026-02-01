@@ -1,4 +1,5 @@
-import { isProModel } from '../oracle/modelResolver.js';
+import { isProModel, isKnownModel } from '../oracle/modelResolver.js';
+import { MODEL_CONFIGS } from '../oracle/config.js';
 
 export type EngineMode = 'api' | 'browser';
 
@@ -24,7 +25,8 @@ export function resolveEngine(
     engine,
     browserFlag,
     env,
-  }: { engine?: EngineMode; browserFlag?: boolean; env: NodeJS.ProcessEnv },
+    model,
+  }: { engine?: EngineMode; browserFlag?: boolean; env: NodeJS.ProcessEnv; model?: string },
 ): EngineMode {
   if (browserFlag) {
     return 'browser';
@@ -35,6 +37,12 @@ export function resolveEngine(
   const envEngine = normalizeEngineMode(env.ORACLE_ENGINE);
   if (envEngine) {
     return envEngine;
+  }
+  // Check Perplexity key for known Perplexity models
+  if (model && isKnownModel(model) && MODEL_CONFIGS[model]?.provider === 'perplexity') {
+    if (env.PERPLEXITY_API_KEY) {
+      return 'api';
+    }
   }
   return env.OPENAI_API_KEY ? 'api' : 'browser';
 }

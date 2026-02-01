@@ -83,7 +83,7 @@ Add Perplexity as direct provider with sonar, sonar-pro, sonar-reasoning-pro, so
   - Acceptance: `oracle -m sonar "test"` with `OPENAI_BASE_URL` set does NOT use OpenAI endpoint
   - Evidence: Set `OPENAI_BASE_URL=https://example.com` and verify sonar hits Perplexity API
 
-- [ ] S1-7: Update engine.ts for Perplexity API key detection
+- [x] S1-7: Update engine.ts for Perplexity API key detection
   - Depends on: S1-2 (needs MODEL_CONFIGS to check if model is Perplexity)
   - Update `src/cli/engine.ts` to recognize `PERPLEXITY_API_KEY` as valid for `api` engine
   - Check: if model is known Perplexity model AND `PERPLEXITY_API_KEY` exists, use `api` engine

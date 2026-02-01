@@ -34,13 +34,14 @@ export function resolveRunOptionsFromConfig({
   userConfig,
   env = process.env,
 }: ResolveRunOptionsInput): ResolvedRunOptions {
-  const resolvedEngine = resolveEngineWithConfig({ engine, configEngine: userConfig?.engine, env });
+  // Resolve model early so engine can consider provider-specific keys (e.g., PERPLEXITY_API_KEY)
+  const cliModelArg = normalizeModelOption(model ?? userConfig?.model) || DEFAULT_MODEL;
+  const resolvedEngine = resolveEngineWithConfig({ engine, configEngine: userConfig?.engine, env, model: cliModelArg });
   const browserRequested = engine === 'browser';
   const browserConfigured = userConfig?.engine === 'browser';
   const requestedModelList = Array.isArray(models) ? models : [];
   const normalizedRequestedModels = requestedModelList.map((entry) => normalizeModelOption(entry)).filter(Boolean);
 
-  const cliModelArg = normalizeModelOption(model ?? userConfig?.model) || DEFAULT_MODEL;
   const inferredModel =
     resolvedEngine === 'browser' && normalizedRequestedModels.length === 0
       ? inferModelFromLabel(cliModelArg)
@@ -114,10 +115,12 @@ function resolveEngineWithConfig({
   engine,
   configEngine,
   env,
+  model,
 }: {
   engine?: EngineMode;
   configEngine?: EngineMode;
   env: NodeJS.ProcessEnv;
+  model?: string;
 }): EngineMode {
   if (engine) return engine;
   const envOverride = (env.ORACLE_ENGINE ?? '').trim().toLowerCase();
@@ -125,7 +128,7 @@ function resolveEngineWithConfig({
     return envOverride as EngineMode;
   }
   if (configEngine) return configEngine;
-  return resolveEngine({ engine: undefined, env });
+  return resolveEngine({ engine: undefined, env, model });
 }
 
 function resolveEffectiveModelId(model: ModelName): string {

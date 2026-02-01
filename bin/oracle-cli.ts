@@ -856,13 +856,14 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     throw new Error('--dry-run cannot be combined with --render-markdown.');
   }
 
-  const preferredEngine = options.engine ?? userConfig.engine;
-  let engine: EngineMode = resolveEngine({ engine: preferredEngine, browserFlag: options.browser, env: process.env });
-  if (options.browser) {
-    console.log(chalk.yellow('`--browser` is deprecated; use `--engine browser` instead.'));
-  }
+  // Resolve model first so engine selection can consider provider-specific keys (e.g., PERPLEXITY_API_KEY)
   if (optionUsesDefault('model') && userConfig.model) {
     options.model = userConfig.model;
+  }
+  const preferredEngine = options.engine ?? userConfig.engine;
+  let engine: EngineMode = resolveEngine({ engine: preferredEngine, browserFlag: options.browser, env: process.env, model: options.model });
+  if (options.browser) {
+    console.log(chalk.yellow('`--browser` is deprecated; use `--engine browser` instead.'));
   }
   if (optionUsesDefault('search') && userConfig.search) {
     options.search = userConfig.search === 'on';
