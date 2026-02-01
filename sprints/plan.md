@@ -91,7 +91,7 @@ Add Perplexity as direct provider with sonar, sonar-pro, sonar-reasoning-pro, so
   - Acceptance: `oracle -m sonar "test"` with only PERPLEXITY_API_KEY uses api engine
   - Evidence: Run without OPENAI_API_KEY, verify api engine selected
 
-- [ ] S1-INT: Integration test
+- [x] S1-INT: Integration test
   - Depends on: S1-1, S1-2, S1-3, S1-3b, S1-4, S1-5, S1-6, S1-7
   - E2E test with real Perplexity API: query, stream, cost extraction, token usage
   - Test all 4 models: sonar, sonar-pro, sonar-reasoning-pro, sonar-deep-research
