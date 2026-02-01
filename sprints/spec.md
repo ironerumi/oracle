@@ -65,7 +65,9 @@ const hasPerplexityKey = Boolean(optionsApiKey) || Boolean(process.env.PERPLEXIT
 (provider === 'perplexity' && !hasPerplexityKey)
 
 // run.ts - add to getApiKeyForModel() (line ~155)
-if (typeof model === 'string' && model.startsWith('sonar')) {
+// Use knownConfig.provider check, NOT prefix - ensures A9 compliance (sonar-invalid won't suggest PERPLEXITY_API_KEY)
+const knownConfig = isKnownModel(model) ? MODEL_CONFIGS[model] : undefined;
+if (knownConfig?.provider === 'perplexity') {
   return { key: optionsApiKey ?? process.env.PERPLEXITY_API_KEY, source: 'PERPLEXITY_API_KEY' };
 }
 
@@ -176,11 +178,28 @@ const cost = (response as any)._upstream_cost_usd ?? (pricing ? estimateUsdCost(
 
 **F7: Error Handling**
 ```typescript
+import { OracleTransportError } from './errors.js';
+
 // perplexity.ts - check response status before parsing
-const raw = await callPerplexity({ ... });
+let raw: Response;
+try {
+  raw = await callPerplexity({ ... });
+} catch (err) {
+  // Network errors (DNS, connection refused, timeout) → wrap in OracleTransportError
+  throw new OracleTransportError(`Perplexity API network error: ${err.message}`, { cause: err });
+}
+
 if (!raw.ok) {
-  const errorBody = await raw.json().catch(() => ({}));
-  throw new Error(errorBody.error?.message || `Perplexity API error: ${raw.status}`);
+  // Try to parse error JSON, fallback to raw text if malformed
+  let errorMessage: string;
+  try {
+    const errorBody = await raw.json();
+    errorMessage = errorBody.error?.message || `Perplexity API error: ${raw.status}`;
+  } catch {
+    const rawText = await raw.text().catch(() => '');
+    errorMessage = rawText || `Perplexity API error: ${raw.status}`;
+  }
+  throw new Error(errorMessage);
 }
 ```
 
@@ -266,7 +285,9 @@ export function createPerplexityClient(
   baseUrl?: string,
 ): ClientLike {
   const modelId = resolvedModelId ?? modelName;
-  const endpoint = baseUrl ? `${baseUrl.replace(/\/$/, '')}/chat/completions` : DEFAULT_PERPLEXITY_ENDPOINT;
+  // Normalize baseUrl: strip trailing slash AND /chat/completions if present (prevents double-append)
+  const normalizedBase = baseUrl?.replace(/\/chat\/completions\/?$/, '').replace(/\/$/, '');
+  const endpoint = normalizedBase ? `${normalizedBase}/chat/completions` : DEFAULT_PERPLEXITY_ENDPOINT;
 
   const stream = async (body: OracleRequestBody): Promise<ResponseStreamLike> => {
     const messages = buildMessages(body);
@@ -340,7 +361,7 @@ run.ts: use _upstream_cost_usd for cost display
 **A1: Model selection works**
 ```bash
 PERPLEXITY_API_KEY=$PERPLEXITY_API_KEY oracle --model sonar "What is 2+2?"
-# Expected: Returns "Four" or similar with citations like [1][2]
+# Expected: Returns "Four" or similar (may include inline citations like [1][2] but not extracted)
 ```
 
 **A2: All 4 models recognized**
@@ -407,6 +428,9 @@ oracle --model sonar-invalid "test" 2>&1
 | API error 429 | Show rate limit message from API |
 | Streaming without final cost | Cost displays as undefined, no crash |
 | Base URL with trailing slash | Handled: `baseUrl.replace(/\/$/, '')` |
+| Base URL with /chat/completions | Stripped before appending (no double-append) |
+| Network error (DNS, timeout) | Wrapped in `OracleTransportError` |
+| Malformed error JSON from API | Falls back to raw text in error message |
 
 ## Test Plan
 
