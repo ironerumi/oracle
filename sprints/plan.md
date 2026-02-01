@@ -49,7 +49,7 @@ Add Perplexity as direct provider with sonar, sonar-pro, sonar-reasoning-pro, so
   - Acceptance: All unit tests pass
   - Evidence: `pnpm exec vitest run tests/oracle/perplexity.test.ts`
 
-- [ ] S1-4: Add routing in client.ts
+- [x] S1-4: Add routing in client.ts
   - Depends on: S1-2, S1-3
   - Import `createPerplexityClient` from `./perplexity.js`
   - Import `isKnownModel` from `./modelResolver.js`

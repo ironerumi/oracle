@@ -18,7 +18,9 @@ import type {
 } from './types.js';
 import { createGeminiClient } from './gemini.js';
 import { createClaudeClient } from './claude.js';
-import { isOpenRouterBaseUrl } from './modelResolver.js';
+import { createPerplexityClient } from './perplexity.js';
+import { isOpenRouterBaseUrl, isKnownModel } from './modelResolver.js';
+import { MODEL_CONFIGS } from './config.js';
 
 export function createDefaultClientFactory(): ClientFactory {
   const customFactory = loadCustomClientFactory();
@@ -27,6 +29,11 @@ export function createDefaultClientFactory(): ClientFactory {
     key: string,
     options?: { baseUrl?: string; azure?: AzureOptions; model?: ModelName; resolvedModelId?: string; httpTimeoutMs?: number },
   ): ClientLike => {
+    // Route by known model config, not just prefix - prevents unknown models like 'sonar-invalid' going to Perplexity
+    const knownConfig = options?.model && isKnownModel(options.model) ? MODEL_CONFIGS[options.model] : undefined;
+    if (knownConfig?.provider === 'perplexity' && options?.model) {
+      return createPerplexityClient(key, options.model, options.resolvedModelId, options.baseUrl);
+    }
     if (options?.model?.startsWith('gemini')) {
       // Gemini client uses its own SDK; allow passing the already-resolved id for transparency/logging.
       return createGeminiClient(key, options.model, options.resolvedModelId);
