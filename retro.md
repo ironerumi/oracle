@@ -16,3 +16,9 @@
 |----|---------|------------|-----|--------|
 | EI-1 | Env vars not in Claude shell (need source ~/.zshrc) | Source secrets file directly: `source ~/Repos/dotfiles/config/zsh/secrets` | 2 | 2026-02 |
 | EI-2 | npm link shadowed by homebrew in PATH | Run `brew unlink <pkg>` before using npm linked version | 1 | 2026-02 |
+
+## Archive Failures
+| ID | Pattern | Prevention | Occ | Latest |
+|----|---------|------------|-----|--------|
+| AF-1 | Template files archived with sprint artifacts | Archive only exploration/spec/plan.md, not PROMPT_build.md or ralph scripts | 1 | 2026-02 |
+| AF-2 | Tag left at wrong commit after follow-up fixes | Tag AFTER all commits done; use `git tag -f` to move if needed | 1 | 2026-02 |
