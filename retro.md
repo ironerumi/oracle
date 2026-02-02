@@ -22,3 +22,8 @@
 |----|---------|------------|-----|--------|
 | AF-1 | Template files archived with sprint artifacts | Archive only exploration/spec/plan.md, not PROMPT_build.md or ralph scripts | 1 | 2026-02 |
 | AF-2 | Tag left at wrong commit after follow-up fixes | Tag AFTER all commits done; use `git tag -f` to move if needed | 1 | 2026-02 |
+
+## Skill Evolution Failures
+| ID | Pattern | Prevention | Occ | Latest |
+|----|---------|------------|-----|--------|
+| EV-1 | Skill evolved but not released | After editing plugin skill: bump version, push, run `claude plugin update` | 1 | 2026-02 |
