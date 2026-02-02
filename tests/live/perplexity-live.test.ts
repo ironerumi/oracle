@@ -31,7 +31,7 @@ const hasKey = Boolean(process.env.PERPLEXITY_API_KEY);
       try {
         const result = await runOracle(
           {
-            prompt: 'Reply with exactly "sonar ok" on one line.',
+            prompt: 'What is 2+2? Reply with just the number.',
             model: 'sonar',
             search: true,
             silent: true,
@@ -43,7 +43,7 @@ const hasKey = Boolean(process.env.PERPLEXITY_API_KEY);
           throw new Error(`Expected live result, received ${result.mode ?? 'unknown'}`);
         }
         const text = extractTextOutput(result.response).toLowerCase();
-        expect(text).toContain('sonar ok');
+        expect(text).toMatch(/4/);
         expectTokens(result.usage);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -63,7 +63,7 @@ const hasKey = Boolean(process.env.PERPLEXITY_API_KEY);
       try {
         const result = await runOracle(
           {
-            prompt: 'Reply with exactly "sonar-pro ok" on one line.',
+            prompt: 'What is 3+3? Reply with just the number.',
             model: 'sonar-pro',
             search: true,
             silent: true,
@@ -75,7 +75,7 @@ const hasKey = Boolean(process.env.PERPLEXITY_API_KEY);
           throw new Error(`Expected live result, received ${result.mode ?? 'unknown'}`);
         }
         const text = extractTextOutput(result.response).toLowerCase();
-        expect(text).toContain('sonar-pro ok');
+        expect(text).toMatch(/6/);
         expectTokens(result.usage);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -95,7 +95,7 @@ const hasKey = Boolean(process.env.PERPLEXITY_API_KEY);
       try {
         const result = await runOracle(
           {
-            prompt: 'Reply with exactly "sonar-reasoning ok" on one line.',
+            prompt: 'What is 5+5? Reply with just the number.',
             model: 'sonar-reasoning-pro',
             search: true,
             silent: true,
@@ -107,7 +107,7 @@ const hasKey = Boolean(process.env.PERPLEXITY_API_KEY);
           throw new Error(`Expected live result, received ${result.mode ?? 'unknown'}`);
         }
         const text = extractTextOutput(result.response).toLowerCase();
-        expect(text).toContain('sonar-reasoning ok');
+        expect(text).toMatch(/10/);
         expectTokens(result.usage);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -127,7 +127,7 @@ const hasKey = Boolean(process.env.PERPLEXITY_API_KEY);
       try {
         const result = await runOracle(
           {
-            prompt: 'Reply with exactly "deep-research ok" on one line.',
+            prompt: 'What is 7+7? Reply with just the number.',
             model: 'sonar-deep-research',
             search: true,
             silent: true,
@@ -139,7 +139,7 @@ const hasKey = Boolean(process.env.PERPLEXITY_API_KEY);
           throw new Error(`Expected live result, received ${result.mode ?? 'unknown'}`);
         }
         const text = extractTextOutput(result.response).toLowerCase();
-        expect(text).toContain('deep-research ok');
+        expect(text).toMatch(/14/);
         expectTokens(result.usage);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -159,7 +159,7 @@ const hasKey = Boolean(process.env.PERPLEXITY_API_KEY);
       try {
         const result = await runOracle(
           {
-            prompt: 'Say "cost test" exactly.',
+            prompt: 'What is 1+1? Reply with just the number.',
             model: 'sonar',
             search: true,
             silent: true,
