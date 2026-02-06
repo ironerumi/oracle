@@ -44,6 +44,23 @@
 - Prefer upstream cost over calculated cost when available
 - Store as internal field, check in run.ts before calculating
 
+### Documentation Pattern for New Providers
+**Problem:** Integration complete and tested, but users won't discover it without docs.
+
+**Solution:** Follow existing pattern (Gemini/Anthropic style) in 2 locations:
+1. **README.md** (4 edits):
+   - Line 14: Add to opening paragraph with distinguishing feature
+   - Quick start: Add example with required env var
+   - Integration section: Add `PROVIDER_API_KEY` to env var list
+   - Flags table: Add all model variants to built-ins list
+
+2. **bin/oracle-cli.ts** (1 edit):
+   - Line ~261: Add models to `--model` option help text
+
+**Why:** Users discover features via README scanning and `--help` flag. Missing from either = invisible feature.
+
+**Timing:** Document immediately after integration, not as separate task. "Working but undocumented" = incomplete.
+
 ## Local Development Setup
 
 ### Switching to Local Build
