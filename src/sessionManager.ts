@@ -20,6 +20,20 @@ export interface BrowserSessionConfig {
   timeoutMs?: number;
   debugPort?: number | null;
   inputTimeoutMs?: number;
+  /** Delay before rechecking the conversation after an assistant timeout. */
+  assistantRecheckDelayMs?: number;
+  /** Time budget for the delayed recheck attempt. */
+  assistantRecheckTimeoutMs?: number;
+  /** Wait for an existing shared Chrome to appear before launching a new one. */
+  reuseChromeWaitMs?: number;
+  /** Max time to wait for a shared manual-login profile lock (serializes parallel runs). */
+  profileLockTimeoutMs?: number;
+  /** Delay before starting periodic auto-reattach attempts after a timeout. */
+  autoReattachDelayMs?: number;
+  /** Interval between auto-reattach attempts (0 disables). */
+  autoReattachIntervalMs?: number;
+  /** Time budget for each auto-reattach attempt. */
+  autoReattachTimeoutMs?: number;
   cookieSync?: boolean;
   cookieNames?: string[] | null;
   cookieSyncWaitMs?: number;
@@ -103,6 +117,14 @@ export interface StoredRunOptions {
   httpTimeoutMs?: number;
   zombieTimeoutMs?: number;
   zombieUseLastActivity?: boolean;
+  /** Whether the run preferred to stay attached (true) or detach (false). */
+  waitPreference?: boolean;
+  youtube?: string;
+  generateImage?: string;
+  editImage?: string;
+  outputPath?: string;
+  aspectRatio?: string;
+  geminiShowThoughts?: boolean;
 }
 
 export interface SessionMetadata {
@@ -348,9 +370,10 @@ export async function initializeSession(
   options: InitializeSessionOptions,
   cwd: string,
   notifications?: SessionNotifications,
+  baseSlugOverride?: string,
 ): Promise<SessionMetadata> {
   await ensureSessionStorage();
-  const baseSlug = createSessionId(options.prompt || DEFAULT_SLUG, options.slug);
+  const baseSlug = baseSlugOverride || createSessionId(options.prompt || DEFAULT_SLUG, options.slug);
   const sessionId = await ensureUniqueSessionId(baseSlug);
   const dir = sessionDir(sessionId);
   await ensureDir(dir);
@@ -405,6 +428,13 @@ export async function initializeSession(
       zombieTimeoutMs: options.zombieTimeoutMs,
       zombieUseLastActivity: options.zombieUseLastActivity,
       writeOutputPath: options.writeOutputPath,
+      waitPreference: options.waitPreference,
+      youtube: options.youtube,
+      generateImage: options.generateImage,
+      editImage: options.editImage,
+      outputPath: options.outputPath,
+      aspectRatio: options.aspectRatio,
+      geminiShowThoughts: options.geminiShowThoughts,
     },
   };
   await ensureDir(modelsDir(sessionId));

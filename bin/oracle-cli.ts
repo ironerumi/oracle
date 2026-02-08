@@ -116,6 +116,7 @@ interface CliOptions extends OptionValues {
   browserUrl?: string;
   browserTimeout?: string;
   browserInputTimeout?: string;
+  browserProfileLockTimeout?: string;
   browserCookieWait?: string;
   browserNoCookieSync?: boolean;
   browserInlineCookiesFile?: string;
@@ -137,6 +138,12 @@ interface CliOptions extends OptionValues {
   browserDebugPort?: number;
   remoteHost?: string;
   remoteToken?: string;
+  youtube?: string;
+  generateImage?: string;
+  editImage?: string;
+  output?: string;
+  aspect?: string;
+  geminiShowThoughts?: boolean;
   copyMarkdown?: boolean;
   copy?: boolean;
   verbose?: boolean;
@@ -144,8 +151,8 @@ interface CliOptions extends OptionValues {
   heartbeat?: number;
   status?: boolean;
   dryRun?: boolean;
+  // tri-state: `true` (forced wait), `false` (forced detach), `undefined` (auto)
   wait?: boolean;
-  noWait?: boolean;
   baseUrl?: string;
   azureEndpoint?: string;
   azureDeployment?: string;
@@ -162,6 +169,13 @@ type ResolvedCliOptions = Omit<CliOptions, 'model'> & {
   effectiveModelId?: string;
   writeOutputPath?: string;
 };
+
+interface RestartCommandOptions {
+  // tri-state: `true` (forced wait), `false` (forced detach), `undefined` (auto)
+  wait?: boolean;
+  remoteHost?: string;
+  remoteToken?: string;
+}
 
 const VERSION = getCliVersion();
 const CLI_ENTRYPOINT = fileURLToPath(import.meta.url);
@@ -383,7 +397,49 @@ program
   .addOption(new Option('--browser-url <url>', `Alias for --chatgpt-url (default ${CHATGPT_URL}).`).hideHelp())
   .addOption(new Option('--browser-timeout <ms|s|m>', 'Maximum time to wait for an answer (default 1200s / 20m).').hideHelp())
   .addOption(
-    new Option('--browser-input-timeout <ms|s|m>', 'Maximum time to wait for the prompt textarea (default 30s).').hideHelp(),
+    new Option('--browser-input-timeout <ms|s|m>', 'Maximum time to wait for the prompt textarea (default 60s).').hideHelp(),
+  )
+  .addOption(
+    new Option(
+      '--browser-recheck-delay <ms|s|m|h>',
+      'After an assistant timeout, wait this long then revisit the conversation to retry capture.',
+    ).hideHelp(),
+  )
+  .addOption(
+    new Option(
+      '--browser-recheck-timeout <ms|s|m|h>',
+      'Time budget for the delayed recheck attempt (default 120s).',
+    ).hideHelp(),
+  )
+  .addOption(
+    new Option(
+      '--browser-reuse-wait <ms|s|m|h>',
+      'Wait for a shared Chrome profile to appear before launching a new one (helps parallel runs).',
+    ).hideHelp(),
+  )
+  .addOption(
+    new Option(
+      '--browser-profile-lock-timeout <ms|s|m|h>',
+      'Wait for the shared manual-login profile lock before sending (serializes parallel runs).',
+    ).hideHelp(),
+  )
+  .addOption(
+    new Option(
+      '--browser-auto-reattach-delay <ms|s|m|h>',
+      'Delay before starting periodic auto-reattach attempts after a timeout.',
+    ).hideHelp(),
+  )
+  .addOption(
+    new Option(
+      '--browser-auto-reattach-interval <ms|s|m|h>',
+      'Interval between auto-reattach attempts (0 disables).',
+    ).hideHelp(),
+  )
+  .addOption(
+    new Option(
+      '--browser-auto-reattach-timeout <ms|s|m|h>',
+      'Time budget for each auto-reattach attempt (default 120s).',
+    ).hideHelp(),
   )
   .addOption(
     new Option(
@@ -651,6 +707,18 @@ const statusCommand = program
       limit: statusOptions.limit,
       showExamples,
     });
+  });
+
+program
+  .command('restart <id>')
+  .description('Re-run a stored session as a new session (clones options).')
+  .addOption(new Option('--wait').default(undefined))
+  .addOption(new Option('--no-wait').default(undefined).hideHelp())
+  .option('--remote-host <host:port>', 'Delegate browser runs to a remote `oracle serve` instance.')
+  .option('--remote-token <token>', 'Access token for the remote `oracle serve` instance.')
+  .action(async (sessionId: string, _options: RestartCommandOptions, cmd: Command) => {
+    const restartOptions = cmd.opts<RestartCommandOptions>();
+    await restartSession(sessionId, restartOptions);
   });
 
 function buildRunOptions(options: ResolvedCliOptions, overrides: Partial<RunOracleOptions> = {}): RunOracleOptions {
@@ -970,11 +1038,10 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   // - otherwise block for fast models (gpt-5.1, browser) and detach by default for pro API runs
   let waitPreference = resolveWaitFlag({
     waitFlag: options.wait,
-    noWaitFlag: options.noWait,
     model: resolvedModel,
     engine,
   });
-  if (remoteHost && !waitPreference) {
+  if (remoteHost && waitPreference === false) {
     console.log(chalk.dim('Remote browser runs require --wait; ignoring --no-wait.'));
     waitPreference = true;
   }
@@ -1197,6 +1264,13 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       ...baseRunOptions,
       mode: sessionMode,
       browserConfig,
+      waitPreference,
+      youtube: options.youtube,
+      generateImage: options.generateImage,
+      editImage: options.editImage,
+      outputPath: options.output,
+      aspectRatio: options.aspect,
+      geminiShowThoughts: options.geminiShowThoughts,
     },
     process.cwd(),
     notifications,
@@ -1266,6 +1340,7 @@ async function runInteractiveSession(
   userConfig?: UserConfig,
   suppressSummary = false,
   browserDeps?: BrowserSessionRunnerDeps,
+  cwd: string = process.cwd(),
 ): Promise<void> {
   const { logLine, writeChunk, stream } = sessionStore.createLogWriter(sessionMeta.id);
   let headerAugmented = false;
@@ -1294,7 +1369,7 @@ async function runInteractiveSession(
       runOptions,
       mode,
       browserConfig,
-      cwd: process.cwd(),
+      cwd,
       log: combinedLog,
       write: combinedWrite,
       version: VERSION,
@@ -1335,6 +1410,169 @@ async function launchDetachedSession(sessionId: string): Promise<boolean> {
       reject(error);
     }
   });
+}
+
+async function restartSession(sessionId: string, options: RestartCommandOptions): Promise<void> {
+  const metadata = await sessionStore.readSession(sessionId);
+  if (!metadata) {
+    console.error(chalk.red(`No session found with ID ${sessionId}`));
+    process.exitCode = 1;
+    return;
+  }
+
+  const runOptions = buildRunOptionsFromMetadata(metadata);
+  if (!runOptions.prompt) {
+    console.error(chalk.red(`Session ${sessionId} has no stored prompt; cannot restart.`));
+    process.exitCode = 1;
+    return;
+  }
+
+  const sessionMode = getSessionMode(metadata);
+  const engine: EngineMode = sessionMode === 'browser' ? 'browser' : 'api';
+  const browserConfig = getBrowserConfigFromMetadata(metadata);
+  if (sessionMode === 'browser' && !browserConfig) {
+    console.error(chalk.red(`Session ${sessionId} is missing browser config; cannot restart.`));
+    process.exitCode = 1;
+    return;
+  }
+
+  const userConfig = (await loadUserConfig()).config;
+  const cwd = metadata.cwd ?? process.cwd();
+  const storedOptions = metadata.options ?? {};
+
+  if (runOptions.file && runOptions.file.length > 0) {
+    const isBrowserMode = engine === 'browser';
+    const filesToValidate = isBrowserMode ? runOptions.file.filter((f) => !isMediaFile(f)) : runOptions.file;
+    if (filesToValidate.length > 0) {
+      await readFiles(filesToValidate, { cwd });
+    }
+  }
+
+  enforceBrowserSearchFlag(runOptions, sessionMode, console.log);
+
+  let waitPreference = resolveRestartWaitPreference({
+    waitFlag: options.wait,
+    storedPreference: storedOptions.waitPreference,
+    model: runOptions.model,
+    engine,
+  });
+
+  const remoteConfig = resolveRemoteServiceConfig({
+    cliHost: options.remoteHost,
+    cliToken: options.remoteToken,
+    userConfig,
+    env: process.env,
+  });
+  const remoteHost = remoteConfig.host;
+  const remoteToken = remoteConfig.token;
+  if (remoteHost && engine !== 'browser') {
+    throw new Error('--remote-host requires a browser session.');
+  }
+  if (remoteHost) {
+    console.log(chalk.dim(`Remote browser host detected: ${remoteHost}`));
+  }
+  if (remoteHost && waitPreference === false) {
+    console.log(chalk.dim('Remote browser runs require --wait; ignoring --no-wait.'));
+    waitPreference = true;
+  }
+
+  let browserDeps: BrowserSessionRunnerDeps | undefined;
+  if (browserConfig && remoteHost) {
+    browserDeps = {
+      executeBrowser: createRemoteBrowserExecutor({ host: remoteHost, token: remoteToken }),
+    };
+    console.log(chalk.dim(`Routing browser automation to remote host ${remoteHost}`));
+  } else if (browserConfig && runOptions.model.startsWith('gemini')) {
+    browserDeps = {
+      executeBrowser: createGeminiWebExecutor({
+        youtube: storedOptions.youtube,
+        generateImage: storedOptions.generateImage,
+        editImage: storedOptions.editImage,
+        outputPath: storedOptions.outputPath,
+        aspectRatio: storedOptions.aspectRatio,
+        showThoughts: storedOptions.geminiShowThoughts,
+      }),
+    };
+    console.log(chalk.dim('Using Gemini web client for browser automation'));
+    if (browserConfig.modelStrategy && browserConfig.modelStrategy !== 'select') {
+      console.log(chalk.dim('Browser model strategy is ignored for Gemini web runs.'));
+    }
+  }
+  const remoteExecutionActive = Boolean(browserDeps);
+
+  await sessionStore.ensureStorage();
+  const notifications = deriveNotificationSettingsFromMetadata(metadata, process.env, userConfig.notify);
+  const sessionMeta = await sessionStore.createSession(
+    {
+      ...runOptions,
+      mode: sessionMode,
+      browserConfig,
+      waitPreference,
+      youtube: storedOptions.youtube,
+      generateImage: storedOptions.generateImage,
+      editImage: storedOptions.editImage,
+      outputPath: storedOptions.outputPath,
+      aspectRatio: storedOptions.aspectRatio,
+      geminiShowThoughts: storedOptions.geminiShowThoughts,
+    },
+    cwd,
+    notifications,
+    sessionId,
+  );
+
+  const liveRunOptions: RunOracleOptions = {
+    ...runOptions,
+    sessionId: sessionMeta.id,
+    effectiveModelId: resolveEffectiveModelIdForRun(runOptions.model, runOptions.effectiveModelId),
+  };
+
+  const disableDetachEnv = process.env.ORACLE_NO_DETACH === '1';
+  const detachAllowed = remoteExecutionActive
+    ? false
+    : shouldDetachSession({
+        engine,
+        model: runOptions.model,
+        waitPreference,
+        disableDetachEnv,
+      });
+  const detached = !detachAllowed
+    ? false
+    : await launchDetachedSession(sessionMeta.id).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.log(chalk.yellow(`Unable to detach session runner (${message}). Running inline...`));
+        return false;
+      });
+
+  if (!waitPreference) {
+    if (!detached) {
+      console.log(chalk.red('Unable to start in background; use --wait to run inline.'));
+      process.exitCode = 1;
+      return;
+    }
+    console.log(chalk.blue(`Session running in background. Reattach via: oracle session ${sessionMeta.id}`));
+    console.log(chalk.dim('Pro runs can take up to 60 minutes (usually 10-15). Add --wait to stay attached.'));
+    return;
+  }
+
+  if (detached === false) {
+    await runInteractiveSession(
+      sessionMeta,
+      liveRunOptions,
+      sessionMode,
+      browserConfig,
+      false,
+      notifications,
+      userConfig,
+      true,
+      browserDeps,
+      cwd,
+    );
+    return;
+  }
+  if (detached) {
+    console.log(chalk.blue(`Reattach via: oracle session ${sessionMeta.id}`));
+    await attachSession(sessionMeta.id, { suppressMetadata: true });
+  }
 }
 
 async function executeSession(sessionId: string) {
@@ -1386,6 +1624,13 @@ function printDebugHelp(cliName: string): void {
     ['--browser-url <url>', 'Alias for --chatgpt-url.'],
     ['--browser-timeout <ms|s|m>', 'Cap total wait time for the assistant response.'],
     ['--browser-input-timeout <ms|s|m>', 'Cap how long we wait for the composer textarea.'],
+    ['--browser-recheck-delay <ms|s|m|h>', 'After timeout, wait then revisit the conversation to retry capture.'],
+    ['--browser-recheck-timeout <ms|s|m|h>', 'Time budget for the delayed recheck attempt.'],
+    ['--browser-reuse-wait <ms|s|m|h>', 'Wait for a shared Chrome profile before launching (parallel runs).'],
+    ['--browser-profile-lock-timeout <ms|s|m|h>', 'Wait for the manual-login profile lock before sending.'],
+    ['--browser-auto-reattach-delay <ms|s|m|h>', 'Delay before periodic auto-reattach attempts after a timeout.'],
+    ['--browser-auto-reattach-interval <ms|s|m|h>', 'Interval between auto-reattach attempts (0 disables).'],
+    ['--browser-auto-reattach-timeout <ms|s|m|h>', 'Time budget for each auto-reattach attempt.'],
     ['--browser-cookie-wait <ms|s|m>', 'Wait before retrying cookie sync when Chrome cookies are empty or locked.'],
     ['--browser-no-cookie-sync', 'Skip copying cookies from your main profile.'],
     ['--browser-manual-login', 'Skip cookie copy; reuse a persistent automation profile and log in manually.'],
@@ -1407,18 +1652,41 @@ function printDebugOptionGroup(entries: Array<[string, string]>): void {
 
 function resolveWaitFlag({
   waitFlag,
-  noWaitFlag,
   model,
   engine,
 }: {
   waitFlag?: boolean;
-  noWaitFlag?: boolean;
   model: ModelName;
   engine: EngineMode;
 }): boolean {
   if (waitFlag === true) return true;
-  if (noWaitFlag === true) return false;
+  if (waitFlag === false) return false;
   return defaultWaitPreference(model, engine);
+}
+
+function resolveRestartWaitPreference({
+  waitFlag,
+  storedPreference,
+  model,
+  engine,
+}: {
+  waitFlag?: boolean;
+  storedPreference?: boolean;
+  model: ModelName;
+  engine: EngineMode;
+}): boolean {
+  if (waitFlag === true) return true;
+  if (waitFlag === false) return false;
+  if (typeof storedPreference === 'boolean') return storedPreference;
+  return defaultWaitPreference(model, engine);
+}
+
+function resolveEffectiveModelIdForRun(model: ModelName, stored?: string): string {
+  if (stored) return stored;
+  if (model.startsWith('gemini')) {
+    return resolveGeminiModelId(model);
+  }
+  return isKnownModel(model) ? MODEL_CONFIGS[model].apiModel ?? model : model;
 }
 
 program.action(async function (this: Command) {

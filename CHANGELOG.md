@@ -1,16 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Sessions: add `oracle restart <id>` to re-run a stored session as a new session (clones options) (#84, thanks @enki).
+
+### Fixed
+- Browser: fix markdown fallback extractor TDZ crash in browser mode (#90, thanks @julianknutsen).
+- CLI: honor `--no-wait` for Commander `--no-` flags (fixes restart wait preference) (#84, thanks @enki).
+
 ## 0.8.5 — 2026-01-19
 
 ### Added
 - Bridge: add the bridge workflow + MCP browser controls for remote ChatGPT sessions. Original PR #42 by Kyle McCleary (@kmccleary3301) — thank you!
 - CLI: add `--background`/`--no-background`, `--http-timeout`, `--zombie-timeout`, and `--zombie-last-activity` to support long-running API sessions.
+- Browser: optional delayed recheck after assistant timeouts (`--browser-recheck-delay` / `--browser-recheck-timeout`).
+- Browser: optional periodic auto-reattach attempts after timeouts (`--browser-auto-reattach-delay` / `--browser-auto-reattach-interval` / `--browser-auto-reattach-timeout`). Original PR #87 by Felix Huber (@felix-huber) — thank you!
+- Browser: add `--browser-profile-lock-timeout` to serialize manual-login runs that share a Chrome profile.
 
 ### Fixed
 - CLI: restore legacy `--[no-]notify`, `--[no-]notify-sound`, and `--[no-]background` flags as hidden aliases (Commander no longer accepts `[no-]` in `new Option()`).
 - Sessions: zombie detection now respects explicit timeouts and can optionally use last log activity to avoid false “zombie” status on long runs.
 - Browser: fall back to the default DevTools target if an isolated tab fails, and keep the run tab open when `--keep-browser` is set.
 - Browser: refresh long assistant responses without clobbering captured Markdown.
+- Browser: keep sessions reattachable when assistant responses time out (e.g., long Pro runs) and log a reattach hint.
+- Browser: avoid attaching to the default tab when reusing a shared manual-login Chrome (reduces cross-run interference).
 
 ### Changed
 - Config: remove legacy `remote.host`/`remote.token` and top-level `remoteHost`/`remoteToken`; use `browser.remoteHost`/`browser.remoteToken` or env vars.
