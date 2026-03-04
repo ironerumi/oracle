@@ -22,6 +22,7 @@ import type { ModelName, PreviewMode, RunOracleOptions } from '../src/oracle.js'
 import { CHATGPT_URL, normalizeChatgptUrl } from '../src/browserMode.js';
 import { createRemoteBrowserExecutor } from '../src/remote/client.js';
 import { createGeminiWebExecutor } from '../src/gemini-web/index.js';
+import { createPerplexityBrowserExecutor } from '../src/perplexity-browser/index.js';
 import { applyHelpStyling } from '../src/cli/help.js';
 import {
   collectPaths,
@@ -144,6 +145,7 @@ interface CliOptions extends OptionValues {
   output?: string;
   aspect?: string;
   geminiShowThoughts?: boolean;
+  space?: string;
   copyMarkdown?: boolean;
   copy?: boolean;
   verbose?: boolean;
@@ -526,6 +528,7 @@ program
     ),
   )
   .addOption(new Option('--gemini-show-thoughts', 'Display Gemini thinking process (Gemini web/cookie mode only).').default(false))
+  .addOption(new Option('--space <slug>', 'Perplexity Space slug or URL for query context (Perplexity browser mode only).'))
   .option(
     '--retain-hours <hours>',
     'Prune stored sessions older than this many hours before running (set 0 to disable).',
@@ -986,10 +989,11 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       : resolveApiModel(cliModelArg || DEFAULT_MODEL);
   const primaryModelCandidate = normalizedMultiModels[0] ?? resolvedModelCandidate;
   const isGemini = primaryModelCandidate.startsWith('gemini');
+  const isPerplexity = primaryModelCandidate.startsWith('sonar');
   const isCodex = primaryModelCandidate.startsWith('gpt-5.1-codex');
   const isClaude = primaryModelCandidate.startsWith('claude');
   const userForcedBrowser = options.browser || options.engine === 'browser';
-  const isBrowserCompatible = (model: string) => model.startsWith('gpt-') || model.startsWith('gemini');
+  const isBrowserCompatible = (model: string) => model.startsWith('gpt-') || model.startsWith('gemini') || model.startsWith('sonar');
   const hasNonBrowserCompatibleTarget =
     (engine === 'browser' || userForcedBrowser) &&
     (normalizedMultiModels.length > 0
@@ -997,7 +1001,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       : !isBrowserCompatible(resolvedModelCandidate));
   if (hasNonBrowserCompatibleTarget) {
     throw new Error(
-      'Browser engine only supports GPT and Gemini models. Re-run with --engine api for Grok, Claude, or other models.'
+      'Browser engine only supports GPT, Gemini, and Perplexity models. Re-run with --engine api for Grok, Claude, or other models.'
     );
   }
   if (isClaude && engine === 'browser') {
@@ -1013,6 +1017,9 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   }
   if (remoteHost && normalizedMultiModels.length > 0) {
     throw new Error('--remote-host does not support --models yet. Use API engine locally instead.');
+  }
+  if (options.space && !isPerplexity) {
+    throw new Error('--space is only supported with Perplexity models (sonar, sonar-pro, sonar-reasoning-pro, sonar-deep-research).');
   }
   const resolvedModel: ModelName =
     normalizedMultiModels[0] ?? (isGemini ? resolveApiModel(cliModelArg) : resolvedModelCandidate);
@@ -1209,6 +1216,14 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       executeBrowser: createRemoteBrowserExecutor({ host: remoteHost, token: remoteToken }),
     };
     console.log(chalk.dim(`Routing browser automation to remote host ${remoteHost}`));
+  } else if (browserConfig && isPerplexity) {
+    browserDeps = {
+      executeBrowser: createPerplexityBrowserExecutor(browserConfig, { space: options.space }),
+    };
+    console.log(chalk.dim('Using Perplexity browser engine for automation'));
+    if (options.space) {
+      console.log(chalk.dim(`Perplexity Space: ${options.space}`));
+    }
   } else if (browserConfig && resolvedModel.startsWith('gemini')) {
     browserDeps = {
       executeBrowser: createGeminiWebExecutor({

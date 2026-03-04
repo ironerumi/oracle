@@ -40,9 +40,7 @@ export function resolveEngine(
   }
   // Check Perplexity key for known Perplexity models
   if (model && isKnownModel(model) && MODEL_CONFIGS[model]?.provider === 'perplexity') {
-    if (env.PERPLEXITY_API_KEY) {
-      return 'api';
-    }
+    return env.PERPLEXITY_API_KEY ? 'api' : 'browser';
   }
   return env.OPENAI_API_KEY ? 'api' : 'browser';
 }

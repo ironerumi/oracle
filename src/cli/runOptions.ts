@@ -57,11 +57,11 @@ export function resolveRunOptionsFromConfig({
     normalizedRequestedModels.length > 0
       ? Array.from(new Set(normalizedRequestedModels.map((entry) => resolveApiModel(entry))))
       : [resolvedModel];
-  const isBrowserCompatible = (m: string) => m.startsWith('gpt-') || m.startsWith('gemini');
+  const isBrowserCompatible = (m: string) => m.startsWith('gpt-') || m.startsWith('gemini') || m.startsWith('sonar');
   const hasNonBrowserCompatibleTarget = (browserRequested || browserConfigured) && allModels.some((m) => !isBrowserCompatible(m));
   if (hasNonBrowserCompatibleTarget) {
     throw new PromptValidationError(
-      'Browser engine only supports GPT and Gemini models. Re-run with --engine api for Grok, Claude, or other models.',
+      'Browser engine only supports GPT, Gemini, and Perplexity models. Re-run with --engine api for Grok, Claude, or other models.',
       { engine: 'browser', models: allModels },
     );
   }

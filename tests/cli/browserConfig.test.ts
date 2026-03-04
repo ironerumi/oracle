@@ -186,6 +186,28 @@ describe('buildBrowserConfig', () => {
   });
 });
 
+describe('Perplexity model labels', () => {
+  test('maps sonar to Default browser label', async () => {
+    const config = await buildBrowserConfig({ model: 'sonar' });
+    expect(config.desiredModel).toBe('Default');
+  });
+
+  test('maps sonar-pro to Pro browser label', async () => {
+    const config = await buildBrowserConfig({ model: 'sonar-pro' });
+    expect(config.desiredModel).toBe('Pro');
+  });
+
+  test('maps sonar-reasoning-pro to Reasoning Pro browser label', async () => {
+    const config = await buildBrowserConfig({ model: 'sonar-reasoning-pro' });
+    expect(config.desiredModel).toBe('Reasoning Pro');
+  });
+
+  test('maps sonar-deep-research to Deep Research browser label', async () => {
+    const config = await buildBrowserConfig({ model: 'sonar-deep-research' });
+    expect(config.desiredModel).toBe('Deep Research');
+  });
+});
+
 describe('resolveBrowserModelLabel', () => {
   test('returns canonical ChatGPT label when CLI value matches API model', () => {
     expect(resolveBrowserModelLabel('gpt-5.2-pro', 'gpt-5.2-pro')).toBe('GPT-5.2 Pro');

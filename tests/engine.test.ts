@@ -63,6 +63,34 @@ describe('resolveEngine', () => {
     const engine = resolveEngine({ engine: undefined, browserFlag: false, env, model: 'sonar-invalid' });
     expect(engine).toBe<EngineMode>('browser');
   });
+
+  it('resolves browser for sonar-pro without PERPLEXITY_API_KEY', () => {
+    const env = { ...envWithoutKey } as NodeJS.ProcessEnv;
+    delete env.PERPLEXITY_API_KEY;
+    const engine = resolveEngine({ engine: undefined, browserFlag: false, env, model: 'sonar-pro' });
+    expect(engine).toBe<EngineMode>('browser');
+  });
+
+  it('resolves browser for sonar-deep-research without PERPLEXITY_API_KEY', () => {
+    const env = { ...envWithoutKey } as NodeJS.ProcessEnv;
+    delete env.PERPLEXITY_API_KEY;
+    const engine = resolveEngine({ engine: undefined, browserFlag: false, env, model: 'sonar-deep-research' });
+    expect(engine).toBe<EngineMode>('browser');
+  });
+
+  it('resolves api for sonar-pro with PERPLEXITY_API_KEY', () => {
+    const env = { ...envWithoutKey, PERPLEXITY_API_KEY: 'pplx-test' } as NodeJS.ProcessEnv;
+    const engine = resolveEngine({ engine: undefined, browserFlag: false, env, model: 'sonar-pro' });
+    expect(engine).toBe<EngineMode>('api');
+  });
+
+  it('does not fall through to OpenAI key check for Perplexity models without API key', () => {
+    // Even if OPENAI_API_KEY is set, a Perplexity model without PERPLEXITY_API_KEY should resolve to browser
+    const env = { ...envWithKey } as NodeJS.ProcessEnv;
+    delete env.PERPLEXITY_API_KEY;
+    const engine = resolveEngine({ engine: undefined, browserFlag: false, env, model: 'sonar' });
+    expect(engine).toBe<EngineMode>('browser');
+  });
 });
 
 describe('defaultWaitPreference', () => {

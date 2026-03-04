@@ -27,6 +27,11 @@ const BROWSER_MODEL_LABELS: [ModelName, string][] = [
   ['gpt-5.2', 'GPT-5.2'],       // Selects "Auto" in ChatGPT UI
   ['gpt-5.1', 'GPT-5.2'],       // Legacy alias → Auto
   ['gemini-3-pro', 'Gemini 3 Pro'],
+  // Perplexity models -- labels TBD from logged-in UI inspection
+  ['sonar-deep-research', 'Deep Research'],
+  ['sonar-reasoning-pro', 'Reasoning Pro'],
+  ['sonar-pro', 'Pro'],
+  ['sonar', 'Default'],
 ];
 
 export interface BrowserFlagOptions {
