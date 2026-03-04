@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import type { BrowserRunOptions, BrowserRunResult, BrowserLogger, ChromeClient } from '../browser/types.js';
@@ -20,10 +20,13 @@ import { selectPerplexityModel } from './actions/modelSelection.js';
 import { navigateToSpace } from './actions/spaceNavigation.js';
 import { submitPerplexityPrompt } from './actions/promptSubmit.js';
 import { capturePerplexityResponse, formatWithCitations } from './actions/responseCapture.js';
+import { enableSocialSource } from './actions/sourceFilter.js';
 
 export interface PerplexityBrowserOptions {
   /** Perplexity Space slug or full URL. */
   space?: string | null;
+  /** Path to inline cookies file — enables auto-refresh write-back after successful runs. */
+  cookieFilePath?: string | null;
 }
 
 /**
@@ -41,6 +44,7 @@ export function createPerplexityBrowserExecutor(
     const startTime = Date.now();
     const log: BrowserLogger = runOptions.log ?? ((_msg: string) => {});
     const space = options.space ?? null;
+    const cookieFilePath = options.cookieFilePath ?? null;
     const promptText = runOptions.prompt?.trim();
 
     if (!promptText) {
@@ -64,7 +68,7 @@ export function createPerplexityBrowserExecutor(
     // Build a resolved config suitable for chromeLifecycle
     const resolvedConfig = {
       headless: browserConfig.headless ?? false,
-      hideWindow: browserConfig.hideWindow ?? false,
+      hideWindow: browserConfig.hideWindow ?? true,
       keepBrowser: false,
       url: PERPLEXITY_URL,
       chatgptUrl: null,
@@ -99,6 +103,11 @@ export function createPerplexityBrowserExecutor(
     const chromeHost = (chrome as unknown as { host?: string }).host ?? '127.0.0.1';
     const removeHooks = registerTerminationHooks(chrome, userDataDir, false, log);
 
+    // Hide Chrome window by default (headful for Cloudflare bypass, but no visible popup)
+    if (resolvedConfig.hideWindow && !resolvedConfig.headless) {
+      await hideChromeWindow(chrome, log);
+    }
+
     let client: ChromeClient | null = null;
     let isolatedTargetId: string | undefined;
 
@@ -125,19 +134,42 @@ export function createPerplexityBrowserExecutor(
       await Promise.all([Network.enable({}), Page.enable(), Runtime.enable()]);
       await Network.clearBrowserCookies();
 
-      // Sync Perplexity cookies from Chrome profile
+      // Apply Perplexity cookies.
+      // Two paths:
+      // 1. Inline cookies (--browser-inline-cookies-file): apply directly via CDP setCookie,
+      //    preserving both url AND domain to ensure all subdomains receive auth cookies.
+      //    --browser-no-cookie-sync does NOT suppress inline cookies.
+      // 2. Chrome profile cookies (default): read via syncCookies + Keychain/profile path.
       let appliedCookies = 0;
-      if (resolvedConfig.cookieSync) {
+      if (resolvedConfig.inlineCookies?.length) {
+        let applied = 0;
+        for (const cookie of resolvedConfig.inlineCookies) {
+          if (!cookie?.name) continue;
+          try {
+            // Apply with url so CDP accepts it; keep domain so Perplexity subdomain requests
+            // (e.g. /spaces/ page) receive the auth token.
+            const cookieParam = {
+              ...cookie,
+              url: `https://${cookie.domain ?? 'www.perplexity.ai'}`,
+            };
+            const result = await Network.setCookie(cookieParam);
+            if (result?.success) applied++;
+          } catch {
+            // ignore individual cookie failures
+          }
+        }
+        appliedCookies = applied;
+        log(`[perplexity-browser] Applied ${applied} inline Perplexity cookie(s)`);
+      } else if (resolvedConfig.cookieSync) {
         const cookieCount = await syncCookies(Network, PERPLEXITY_URL, resolvedConfig.chromeProfile, log, {
           allowErrors: resolvedConfig.allowCookieErrors,
           filterNames: resolvedConfig.cookieNames ?? undefined,
-          inlineCookies: resolvedConfig.inlineCookies ?? undefined,
           cookiePath: resolvedConfig.chromeCookiePath ?? undefined,
           waitMs: resolvedConfig.cookieSyncWaitMs,
           extraOrigins: PERPLEXITY_COOKIE_URLS,
         });
         appliedCookies = cookieCount;
-        if (cookieCount === 0 && !resolvedConfig.inlineCookies) {
+        if (cookieCount === 0) {
           log('[perplexity-browser] Warning: no Perplexity cookies found. Login check will likely fail.');
         } else {
           log(`[perplexity-browser] Applied ${cookieCount} Perplexity cookie(s)`);
@@ -161,11 +193,36 @@ export function createPerplexityBrowserExecutor(
       // Select model in picker (skips for default 'sonar')
       await race(selectPerplexityModel(Runtime, resolvedConfig.desiredModel, log));
 
+      // Enable Social source filter (always on for richer results)
+      await race(enableSocialSource(Runtime, log));
+
       // Submit prompt
       await race(submitPerplexityPrompt(Runtime, Input, promptText, log));
 
       // Capture response
       const { text, citations } = await race(capturePerplexityResponse(Runtime, timeoutMs, log));
+
+      // Write back refreshed cookies to the inline cookies file (auto-refresh)
+      if (cookieFilePath) {
+        try {
+          const { cookies: freshCookies } = await Network.getAllCookies();
+          const perplexityCookies = freshCookies
+            .filter((c: { domain: string }) => c.domain.includes('perplexity.ai'))
+            .map((c: { name: string; value: string; domain: string; path: string; secure: boolean; httpOnly: boolean; sameSite?: string; expires?: number }) => ({
+              name: c.name, value: c.value, domain: c.domain,
+              path: c.path || '/', secure: c.secure ?? true, httpOnly: c.httpOnly ?? false,
+              ...(c.sameSite && c.sameSite !== 'None' ? { sameSite: c.sameSite } : {}),
+              ...(typeof c.expires === 'number' && c.expires > 0 ? { expires: c.expires } : {}),
+            }));
+          if (perplexityCookies.length > 0) {
+            await mkdir(path.dirname(cookieFilePath), { recursive: true });
+            await writeFile(cookieFilePath, JSON.stringify(perplexityCookies, null, 2));
+            log(`[perplexity-browser] Refreshed ${perplexityCookies.length} cookies → ${cookieFilePath}`);
+          }
+        } catch (e) {
+          log(`[perplexity-browser] Cookie write-back failed (non-fatal): ${e instanceof Error ? e.message : e}`);
+        }
+      }
 
       // Format with citations
       const answerMarkdown = formatWithCitations(text, citations);

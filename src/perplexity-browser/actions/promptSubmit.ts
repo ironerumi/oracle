@@ -27,31 +27,38 @@ export async function submitPerplexityPrompt(
 
   log?.(`[perplexity-browser] Submitting prompt (${trimmedPrompt.length} chars)`);
 
-  // 1. Focus the Lexical editor
+  // 1. Wait for the Lexical editor to appear (poll up to 15s for React hydration)
   const selectors = JSON.stringify(PROMPT_SELECTORS);
-  const focusResult = await runtime.evaluate({
-    expression: `(() => {
-      const selectors = ${selectors};
-      let editor = null;
-      for (const sel of selectors) {
-        editor = document.querySelector(sel);
-        if (editor) break;
-      }
-      if (!editor) return { found: false };
-      editor.focus();
-      // Collapse selection to end
-      const sel = window.getSelection();
-      if (sel && editor.lastChild) {
-        sel.collapse(editor.lastChild, editor.lastChild.textContent?.length ?? 0);
-      } else if (sel) {
-        sel.collapse(editor, 0);
-      }
-      return { found: true };
-    })()`,
-    returnByValue: true,
-  });
+  const editorWaitDeadline = Date.now() + 15_000;
+  let focusResult: Awaited<ReturnType<typeof runtime.evaluate>> | null = null;
 
-  if (!focusResult.result?.value?.found) {
+  while (Date.now() < editorWaitDeadline) {
+    focusResult = await runtime.evaluate({
+      expression: `(() => {
+        const selectors = ${selectors};
+        let editor = null;
+        for (const sel of selectors) {
+          editor = document.querySelector(sel);
+          if (editor) break;
+        }
+        if (!editor) return { found: false };
+        editor.focus();
+        // Collapse selection to end
+        const sel = window.getSelection();
+        if (sel && editor.lastChild) {
+          sel.collapse(editor.lastChild, editor.lastChild.textContent?.length ?? 0);
+        } else if (sel) {
+          sel.collapse(editor, 0);
+        }
+        return { found: true };
+      })()`,
+      returnByValue: true,
+    });
+    if (focusResult.result?.value?.found) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  if (!focusResult?.result?.value?.found) {
     throw new BrowserAutomationError(
       'Could not find the Perplexity prompt editor. The UI may have changed — update PROMPT_SELECTORS.',
       { stage: 'prompt-submit' },

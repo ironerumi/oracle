@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
+import nodePath from 'node:path';
 import { Command, Option } from 'commander';
 import type { OptionValues } from 'commander';
 // Allow `npx @steipete/oracle oracle-mcp` to resolve the MCP server even though npx runs the default binary.
@@ -783,6 +784,15 @@ export function enforceBrowserSearchFlag(
   }
 }
 
+/** Resolve the inline cookies file path for write-back (auto-refresh). */
+function resolveCookieFilePath(options: ResolvedCliOptions): string | null {
+  const explicit = options.browserInlineCookiesFile ?? process.env.ORACLE_BROWSER_COOKIES_FILE;
+  if (explicit) {
+    return nodePath.isAbsolute(explicit) ? explicit : nodePath.resolve(explicit);
+  }
+  return null;
+}
+
 function resolveHeartbeatIntervalMs(seconds: number | undefined): number | undefined {
   if (typeof seconds !== 'number' || seconds <= 0) {
     return undefined;
@@ -1218,7 +1228,10 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     console.log(chalk.dim(`Routing browser automation to remote host ${remoteHost}`));
   } else if (browserConfig && isPerplexity) {
     browserDeps = {
-      executeBrowser: createPerplexityBrowserExecutor(browserConfig, { space: options.space }),
+      executeBrowser: createPerplexityBrowserExecutor(browserConfig, {
+        space: options.space,
+        cookieFilePath: resolveCookieFilePath(options),
+      }),
     };
     console.log(chalk.dim('Using Perplexity browser engine for automation'));
     if (options.space) {

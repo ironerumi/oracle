@@ -60,8 +60,13 @@ function extractSlug(space: string): string {
   return trimmed;
 }
 
+// Space "New Thread" button texts (locale-dependent)
+const NEW_THREAD_TEXTS = ['New Thread', '新しいスレッド', 'Nouveau fil', 'Neuer Thread'];
+
 /**
  * Navigate to a Perplexity Space and verify the landing page.
+ * After landing, click "New Thread" if the prompt editor is not directly visible
+ * (Space landing pages show existing threads; the input only appears post-click).
  */
 export async function navigateToSpace(
   page: Page,
@@ -91,4 +96,47 @@ export async function navigateToSpace(
   }
 
   log?.(`[perplexity-browser] Landed on Space: ${currentUrl}`);
+
+  // Wait for React hydration — Space pages often show a thread list before the editor.
+  await new Promise((r) => setTimeout(r, 1_000));
+
+  // Check if prompt editor is already present; if not, try "New Thread" button.
+  const newThreadTexts = JSON.stringify(NEW_THREAD_TEXTS);
+  const clickResult = await runtime.evaluate({
+    expression: `(() => {
+      // Check if editor already exists
+      const editor = document.querySelector('[data-lexical-editor][contenteditable="true"]')
+        ?? document.querySelector('[role="textbox"][contenteditable="true"]');
+      if (editor) return { hadEditor: true };
+
+      // Look for New Thread button (text or aria-label match)
+      const texts = ${newThreadTexts};
+      const allBtns = document.querySelectorAll('button, a[role="button"]');
+      for (const btn of allBtns) {
+        const text = btn.textContent?.trim() ?? '';
+        const label = btn.getAttribute('aria-label') ?? '';
+        if (texts.some(t => text.includes(t) || label.includes(t))) {
+          btn.click();
+          return { hadEditor: false, clicked: text || label };
+        }
+      }
+      return { hadEditor: false, clicked: null };
+    })()`,
+    returnByValue: true,
+  });
+
+  const clickVal = clickResult.result?.value as {
+    hadEditor: boolean;
+    clicked?: string | null;
+  } | undefined;
+
+  if (clickVal?.hadEditor) {
+    log?.('[perplexity-browser] Prompt editor already present in Space');
+  } else if (clickVal?.clicked) {
+    log?.(`[perplexity-browser] Clicked "New Thread" button: "${clickVal.clicked}"`);
+    // Wait for the editor to appear after click
+    await new Promise((r) => setTimeout(r, 1_000));
+  } else {
+    log?.('[perplexity-browser] No "New Thread" button found; proceeding (editor may appear)');
+  }
 }

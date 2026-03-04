@@ -24,7 +24,7 @@ export async function selectPerplexityModel(
   desiredModel: string | null | undefined,
   log?: BrowserLogger,
 ): Promise<void> {
-  const model = desiredModel?.trim() ?? 'sonar';
+  const model = (desiredModel?.trim() ?? 'sonar').toLowerCase();
   const labels = PERPLEXITY_MODEL_LABELS[model];
 
   if (!labels) {

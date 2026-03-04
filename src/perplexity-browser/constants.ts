@@ -91,3 +91,17 @@ export const PERPLEXITY_MODEL_LABELS: Record<string, string[]> = {
 // The model picker button label shows the CURRENT model name, not a static label.
 // On first load with default model, it shows "ソナー" / "Sonar".
 export const MODEL_PICKER_BUTTON_TEXTS = ['Sonar', 'ソナー', 'Select model', 'モデルを選択'];
+
+// --- Source filters (connectors & sources submenu) ---
+// Access path: "ファイルまたはツールを追加する" button → "コネクタとソース" menuitem → checkboxes
+// Source filters are [role="menuitemcheckbox"] with SVG icons for native sources.
+// Using SVG icon #href is the most locale-independent, stable selector.
+export const ADD_TOOLS_BUTTON_LABELS = ['ファイルまたはツールを追加する', 'Add files or tools', 'Attach'];
+export const CONNECTORS_MENUITEM_TEXTS = ['コネクタとソース', 'Connectors and sources', 'Sources'];
+
+// Native source icon IDs (inside <use xlink:href="..."> within menuitemcheckbox)
+export const SOURCE_ICON_IDS: Record<string, string> = {
+  web: '#pplx-icon-world',
+  academic: '#pplx-icon-books',
+  social: '#pplx-icon-social',
+};

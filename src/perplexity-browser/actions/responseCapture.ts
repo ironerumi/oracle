@@ -158,17 +158,22 @@ async function extractResponseText(runtime: Runtime): Promise<string> {
  * Live inspection confirmed: citation URLs are NOT in inline spans (those are
  * popover triggers). Real URLs are only available in the "リンク" (Links) tab.
  * We programmatically activate the tab, extract a[href] links, then switch back.
+ *
+ * Important: avoid async IIFE with awaitPromise:true here — Perplexity SPA
+ * navigation on tab click destroys the JS execution context mid-evaluation,
+ * causing "Promise was collected". Use Node-side sleeps between sync evals.
  */
 async function extractSourcesFromLinksTab(runtime: Runtime, log?: BrowserLogger): Promise<Citation[]> {
   const tabTexts = JSON.stringify(SOURCES_TAB_TEXTS);
   const tabSelector = JSON.stringify(TAB_SELECTOR);
 
-  const result = await runtime.evaluate({
-    expression: `(async () => {
+  // Step 1: find tabs and click the Links tab (synchronous, no await inside)
+  const clickResult = await runtime.evaluate({
+    expression: `(() => {
       const tabTexts = ${tabTexts};
       const tabs = document.querySelectorAll(${tabSelector});
       let linksTab = null;
-      let answerTab = null;
+      let answerTabId = null;
 
       for (const tab of tabs) {
         const text = tab.textContent?.trim() ?? '';
@@ -176,12 +181,12 @@ async function extractSourcesFromLinksTab(runtime: Runtime, log?: BrowserLogger)
           linksTab = tab;
         }
         const isActive = tab.getAttribute('data-state') === 'active' || tab.getAttribute('aria-selected') === 'true';
-        if (isActive) {
-          answerTab = tab;
+        if (isActive && !answerTabId) {
+          answerTabId = tab.textContent?.trim() ?? null;
         }
       }
 
-      if (!linksTab) return { sources: [], error: 'links-tab-not-found' };
+      if (!linksTab) return { found: false };
 
       // Activate the Links tab using full pointer event sequence
       // (plain .click() doesn't trigger React/Radix tab switching)
@@ -195,10 +200,23 @@ async function extractSourcesFromLinksTab(runtime: Runtime, log?: BrowserLogger)
       linksTab.dispatchEvent(new MouseEvent('mouseup', evtOpts));
       linksTab.click();
 
-      // Wait for tab panel to render
-      await new Promise(r => setTimeout(r, 800));
+      return { found: true, answerTabId };
+    })()`,
+    returnByValue: true,
+  });
 
-      // Extract links from the now-active panel
+  const clickVal = clickResult.result?.value as { found: boolean; answerTabId?: string | null } | undefined;
+  if (!clickVal?.found) {
+    log?.('[perplexity-browser] Could not extract sources: links-tab-not-found');
+    return [];
+  }
+
+  // Step 2: Node-side sleep to let Radix tab panel render (avoids async IIFE)
+  await new Promise((r) => setTimeout(r, 800));
+
+  // Step 3: extract links (synchronous)
+  const linksResult = await runtime.evaluate({
+    expression: `(() => {
       const links = document.querySelectorAll('a[href^="http"]');
       const sources = [];
       let index = 1;
@@ -214,30 +232,38 @@ async function extractSourcesFromLinksTab(runtime: Runtime, log?: BrowserLogger)
           index++;
         } catch {}
       }
-
-      // Switch back to the Answer tab
-      if (answerTab && answerTab !== linksTab) {
-        const aRect = answerTab.getBoundingClientRect();
-        const ax = aRect.left + aRect.width / 2;
-        const ay = aRect.top + aRect.height / 2;
-        const aOpts = { bubbles: true, cancelable: true, clientX: ax, clientY: ay };
-        answerTab.dispatchEvent(new PointerEvent('pointerdown', aOpts));
-        answerTab.dispatchEvent(new MouseEvent('mousedown', aOpts));
-        answerTab.dispatchEvent(new PointerEvent('pointerup', aOpts));
-        answerTab.dispatchEvent(new MouseEvent('mouseup', aOpts));
-        answerTab.click();
-      }
-
-      return { sources, error: null };
+      return sources;
     })()`,
     returnByValue: true,
-    awaitPromise: true,
   });
 
-  const value = result.result?.value as { sources: Citation[]; error: string | null } | undefined;
-  if (value?.error) {
-    log?.(`[perplexity-browser] Could not extract sources: ${value.error}`);
-    return [];
+  const sources = (linksResult.result?.value ?? []) as Citation[];
+
+  // Step 4: switch back to Answer tab (synchronous, best-effort)
+  if (clickVal.answerTabId) {
+    const answerTabText = JSON.stringify(clickVal.answerTabId);
+    await runtime.evaluate({
+      expression: `(() => {
+        const tabSelector = ${tabSelector};
+        const tabs = document.querySelectorAll(tabSelector);
+        for (const tab of tabs) {
+          if (tab.textContent?.trim() === ${answerTabText}) {
+            const rect = tab.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+            const opts = { bubbles: true, cancelable: true, clientX: x, clientY: y };
+            tab.dispatchEvent(new PointerEvent('pointerdown', opts));
+            tab.dispatchEvent(new MouseEvent('mousedown', opts));
+            tab.dispatchEvent(new PointerEvent('pointerup', opts));
+            tab.dispatchEvent(new MouseEvent('mouseup', opts));
+            tab.click();
+            break;
+          }
+        }
+      })()`,
+      returnByValue: false,
+    }).catch(() => undefined); // best-effort
   }
-  return value?.sources ?? [];
+
+  return sources;
 }
