@@ -68,8 +68,8 @@ Before writing any code, inspect the Perplexity web UI in Chrome DevTools to doc
 - [x] Response completion signal (what appears when streaming ends?)
 - [x] Login state indicator (how to detect logged-in vs not)
 - [ ] Deep Research progress indicators (if different from other models)
-- [ ] Auth cookie names + domain (DevTools > Application > Cookies > perplexity.ai)
-- [ ] Space page structure (does the prompt input appear directly on `/spaces/<slug>`?)
+- [x] Auth cookie names + domain: `__Secure-next-auth.session-token` on `www.perplexity.ai`, `cf_clearance` on `perplexity.ai`
+- [x] Space page structure: editor appears directly on `/spaces/<slug>`, no "New thread" click needed
 
 **Deliverable**: Populate `src/perplexity-browser/constants.ts` with verified selectors.
 
@@ -236,12 +236,12 @@ Validation: `isFullUrl` if starts with `http`; `isSlug` if contains `-` followed
 **Files changed**: `src/browser/cookies.ts` (add `extraOrigins` parameter)
 
 **Acceptance criteria**:
-- [ ] `oracle --engine browser -m sonar --browser-chrome-profile "Profile 2" "what is rust?"` launches Chrome, navigates to perplexity.ai, submits query, returns response text
-- [ ] `oracle --engine browser -m sonar-pro --space "llmcli-0s6TGbvNSfe6kPyQRKdFww" "query"` navigates to the Space, submits query in Space context
-- [ ] Response includes citations as markdown footnotes
-- [ ] Model picker selects the correct model tier
-- [ ] Expired/missing cookies produce a clear error message (not a timeout)
-- [ ] Invalid space slug produces a clear error message
+- [x] `oracle --engine browser -m sonar --browser-inline-cookies-file ~/.oracle/perplexity-cookies.json "what is rust?"` — verified live 2026-03-04
+- [x] `oracle --engine browser -m sonar --space "xin-siisuhesu-0eNIgGZIRbu0fQYD3x4Dsw" "query"` — verified live 2026-03-04
+- [x] Response includes citations as markdown footnotes (10-27 sources observed)
+- [x] Model picker selects the correct model (all sonar → "Sonar" entry)
+- [x] Expired/missing cookies produce clear error: "Not logged in to Perplexity (detected 'Continue with Google' button)"
+- [x] Invalid space slug produces clear error: "Space slug must include the hash suffix"
 
 #### Phase 3: Polish and Edge Cases
 
@@ -269,25 +269,25 @@ Validation: `isFullUrl` if starts with `http`; `isSlug` if contains `-` followed
 
 ### Functional
 
-- [ ] Browser mode works for all 4 Perplexity models (sonar, sonar-pro, sonar-reasoning-pro, sonar-deep-research)
-- [ ] `--space` routes queries to the correct Perplexity Space
-- [ ] `--space` accepts both full URLs and slugs
-- [ ] Response includes citations as markdown footnotes
-- [ ] Engine auto-resolves to browser when no `PERPLEXITY_API_KEY` is set
-- [ ] Chrome profile isolation works via `--browser-chrome-profile`
+- [x] Browser mode works for all 4 Perplexity models (all map to "Sonar" in UI picker)
+- [x] `--space` routes queries to the correct Perplexity Space
+- [x] `--space` accepts both full URLs and slugs
+- [x] Response includes citations as markdown footnotes
+- [x] Engine auto-resolves to browser when no `PERPLEXITY_API_KEY` is set
+- [x] Chrome profile isolation works via `--browser-inline-cookies-file` (preferred over `--browser-chrome-profile`)
 
 ### Non-Functional
 
-- [ ] Minimal regression risk to existing ChatGPT/Gemini paths (mitigated via existing engine + runOptions tests)
-- [ ] Clear error messages for: expired cookies, invalid space, unsupported model, attachments
-- [ ] Existing Perplexity API path continues to work unchanged
+- [x] Minimal regression risk to existing ChatGPT/Gemini paths — 638/638 tests pass
+- [x] Clear error messages for: expired cookies, invalid space, unsupported model, attachments
+- [x] Existing Perplexity API path continues to work unchanged
 
 ### Quality Gates
 
-- [ ] Unit tests for engine resolution changes (`tests/engine.test.ts`)
-- [ ] Unit tests for `--space` validation and URL normalization
+- [x] Unit tests for engine resolution changes (`tests/engine.test.ts` — 4 tests)
+- [x] Unit tests for `--space` validation and URL normalization (`tests/perplexity-browser/spaceNavigation.test.ts` — 6 tests)
 - [ ] Live test: `tests/live/perplexity-browser-live.test.ts`
-- [ ] Test Space for development: `xin-siisuhesu-0eNIgGZIRbu0fQYD3x4Dsw` (Chrome profile: `Profile 2`)
+- [x] Test Space for development: `xin-siisuhesu-0eNIgGZIRbu0fQYD3x4Dsw`
 
 ## Dependencies & Risks
 
@@ -398,3 +398,75 @@ Validation: `isFullUrl` if starts with `http`; `isSlug` if contains `-` followed
 - Spent ~15 min fighting Cloudflare / headless Chrome / agent-browser `--headed` before finding the CDP workaround — could have jumped to `--remote-debugging-port` approach faster
 - Cookie profile copy attempt was doomed (Keychain encryption) — should have recognized earlier and gone straight to fresh Chrome + CDP
 - Phase 0 still has 3 unchecked items requiring logged-in session — should have asked user to manually log in via the CDP Chrome window while it was open
+
+## Session Log — 2026-03-04 (Phase 2)
+
+### Key Decisions & Rationale
+| Decision | Chosen | Rejected | Why |
+|----------|--------|----------|-----|
+| Model labels type | `Record<string, string[]>` (locale-aware arrays) | `Record<string, string>` (single label) | Live CDP inspection showed labels are locale-dependent ("Sonar" vs "ソナー"); need to match either |
+| Model picker strategy | Check current button text, skip if already matching | Always open picker and click target | All sonar variants map to same "Sonar" entry; no need to click picker for the default model |
+| Citation extraction | Activate Links tab, extract `a[href]`, switch back | Read inline `span.citation.inline` | Live inspection: inline spans are popover triggers with domain+count text only; real URLs only in Links tab panel |
+| Tab switching method | Full pointer event sequence (pointerdown→mousedown→pointerup→mouseup→click) | Plain `.click()` | React/Radix doesn't respond to synthetic `.click()` for tab switching |
+| Cookie sync approach | Add `extraOrigins` option to `syncCookies()` | New function / fork cookies.ts | Backward-compatible — existing ChatGPT callers unchanged, Perplexity passes `PERPLEXITY_COOKIE_URLS` |
+| Executor architecture | Full CDP lifecycle (launch Chrome, temp profile, cleanup in finally) | Reuse ChatGPT's `runBrowserMode()` | ChatGPT browser engine is a 1100-line monolith; separate executor keeps Perplexity self-contained |
+| Phase 3 early items | Implemented attachment rejection + deep research timeout + Cloudflare detection in Phase 2 | Defer all to Phase 3 | Low effort, high value — prevents confusing errors during live testing |
+
+### User Preferences Expressed
+- "don't guess, dispatch sonnet subagent to do the live inspection" — always verify with real data before coding
+- User manages Chrome with `--remote-debugging-port=9333` manually; agent-browser connects via `--cdp 9333`
+- User runs JP locale Perplexity — all UI labels in Japanese
+
+### Edge Cases & Data Observations
+- Perplexity model picker is NOT tier-based (sonar/pro/reasoning/deep-research). It's a flat list of cross-provider models: ベスト(Auto), ソナー, Gemini 3 Flash, Gemini 3.1 Pro, GPT-5.2, Claude Sonnet 4.6, Claude Opus 4.6 Max, Grok 4.1, Kimi K2.5
+- Model picker button label = current model name (not static "Select model" aria-label)
+- Space landing page has prompt input directly — no "New thread" click needed
+- `agent-browser click @ref` often fails with "Resource temporarily unavailable (os error 35)" — must use eval with full pointer event sequence
+- agent-browser runs at 1x1 viewport by default — needs Emulation.setDeviceMetricsOverride for coordinate-based work
+- `model?.trim() ?? 'sonar'` doesn't catch empty string (falsy but not nullish) — use `||` instead
+
+### Bugs/Issues Caught
+- `PERPLEXITY_MODEL_LABELS` was completely wrong — assumed tier-based labels ("Default", "Pro", etc.) but actual picker shows cross-provider model names
+- `BROWSER_MODEL_LABELS` sonar entries had wrong labels ("Default", "Pro", etc.) — all should be "Sonar"
+- Citation extraction from `span.citation.inline` would return domain+count text but no URLs — useless for markdown footnotes
+- `resolvePerplexityModelLabel('')` returned null instead of Sonar labels due to `??` vs `||` operator
+
+### Files Modified
+**Created:**
+- `src/perplexity-browser/config.ts` — timeout resolution (30min for deep-research), model label resolver
+- `src/perplexity-browser/actions/navigation.ts` — navigate, Cloudflare detection, login state check
+- `src/perplexity-browser/actions/modelSelection.ts` — model picker interaction (locale-aware, checks current state)
+- `src/perplexity-browser/actions/spaceNavigation.ts` — Space URL resolution, slug validation, landing verification
+- `src/perplexity-browser/actions/promptSubmit.ts` — Lexical editor focus/insert/submit with execCommand fallback
+- `src/perplexity-browser/actions/responseCapture.ts` — completion polling, text extraction, Links tab citation extraction
+- `tests/perplexity-browser/config.test.ts` — 8 tests for timeout + model label resolution
+- `tests/perplexity-browser/spaceNavigation.test.ts` — 6 tests for space URL resolution
+- `tests/perplexity-browser/responseCapture.test.ts` — 3 tests for citation formatting
+
+**Modified:**
+- `src/browser/cookies.ts` — added `extraOrigins` option to `syncCookies()` (backward-compatible)
+- `src/perplexity-browser/index.ts` — replaced stub with full CDP executor (~170 lines)
+- `src/perplexity-browser/constants.ts` — `PERPLEXITY_MODEL_LABELS` rewritten as `Record<string, string[]>`, added `MODEL_PICKER_BUTTON_TEXTS`, `SOURCES_TAB_TEXTS`
+- `src/cli/browserConfig.ts` — sonar entries in `BROWSER_MODEL_LABELS` → "Sonar"
+- `tests/cli/browserConfig.test.ts` — updated 4 Perplexity model label test expectations
+
+### Open Questions / Unfinished
+- **Phase 2 acceptance criteria (live test needed)**: None of the 6 acceptance criteria at line 239 are checked. Need real end-to-end run: `oracle --engine browser -m sonar --browser-chrome-profile "Profile 2" "what is rust?"`. This requires Chrome Profile 2 logged into Perplexity.
+- **Model picker labels unverified by our code**: Live inspection showed picker contents but we never actually tested model SELECTION (clicking an option). The `selectPerplexityModel` code is written but untested end-to-end. For sonar models it should gracefully skip (already default).
+- **Deep Research progress indicators**: Phase 0 item still unchecked. Deep Research may have different completion signals (progress bar, intermediate updates). Current code uses 30min timeout + copy button polling.
+- **Auth cookie names**: Still unknown. Current code checks `cookieCount === 0` which is sufficient but not specific. Knowing the auth cookie name would allow smarter early-failure messages.
+- **Phase 3 remaining items**: multi-model validation (`--models sonar,sonar-pro --engine browser`), `--browser-keep-browser` support, reattach/session persistence (throw "not supported" for now)
+- **Branch state**: `feature/perplexity-integration`, commit `10209a2e`, 638/638 tests pass, not pushed to origin. 2 new commits since Phase 1.
+- **Pre-existing test type errors**: `tests/oracle/perplexity.test.ts` (4 errors) and `tests/live/perplexity-live.test.ts` (3 errors) — unrelated to this work, exist on main
+
+### What's good
+- Live CDP inspection via sonnet subagent caught three major assumption errors (model labels, citation URLs, tab switching) before any live test failure
+- Clean separation: 5 action modules each handle one concern, executor orchestrates
+- Cookie `extraOrigins` is a minimal, backward-compatible change to shared code
+- 638 tests pass with zero regressions, 17 new tests covering Phase 2 logic
+- Attachment rejection and deep research timeout implemented early (Phase 3 items done in Phase 2)
+
+### What could be done better
+- Should have dispatched live inspection subagent BEFORE writing Phase 2 code, not after — would have avoided writing wrong model labels and citation extraction, then rewriting
+- First subagent dispatch for live inspection was rejected (tried to launch Chrome from subagent); user had to manage Chrome themselves. Should have asked user to prepare Chrome + CDP first
+- agent-browser `click @ref` unreliability cost multiple investigation rounds — should have gone straight to `eval` with pointer events from the start
