@@ -24,10 +24,16 @@ export const SUBMIT_BUTTON_SELECTORS = [
 
 // --- Model picker ---
 // Button adjacent to the prompt input that opens a model selection dropdown.
+// The button label shows the current model name (e.g. "ソナー"), not a static aria-label.
 export const MODEL_PICKER_SELECTORS = [
   'button[aria-label="Select model"]',
   'button[aria-label="モデルを選択"]',
 ];
+
+// --- Sources/Links tab ---
+// After response, tabs: 回答 (Answer), リンク (Links), 画像 (Images).
+// Source URLs are ONLY in the Links tab panel, not in inline citation spans.
+export const SOURCES_TAB_TEXTS = ['Links', 'リンク', 'Sources'];
 
 // --- Response container ---
 // Tailwind prose container inside a Radix UI tab panel.
@@ -69,11 +75,19 @@ export function buildSpaceUrl(slug: string): string {
 }
 
 // --- Perplexity model labels (as shown in the web UI model picker) ---
-// TBD: need logged-in session to verify exact picker labels.
-// These are best-guess based on API model names.
-export const PERPLEXITY_MODEL_LABELS: Record<string, string> = {
-  sonar: 'Default',
-  'sonar-pro': 'Pro',
-  'sonar-reasoning-pro': 'Reasoning Pro',
-  'sonar-deep-research': 'Deep Research',
+// Verified via live CDP inspection 2026-03-04:
+// The picker is a FLAT list of cross-provider models, NOT Perplexity tier labels.
+// All sonar API models (sonar, sonar-pro, sonar-reasoning-pro, sonar-deep-research)
+// map to the single "ソナー" / "Sonar" entry in the web UI.
+// The picker label is locale-dependent (JP: "ソナー", EN: "Sonar").
+export const PERPLEXITY_MODEL_LABELS: Record<string, string[]> = {
+  // sonar variants all map to the same picker entry
+  sonar: ['Sonar', 'ソナー'],
+  'sonar-pro': ['Sonar', 'ソナー'],
+  'sonar-reasoning-pro': ['Sonar', 'ソナー'],
+  'sonar-deep-research': ['Sonar', 'ソナー'],
 };
+
+// The model picker button label shows the CURRENT model name, not a static label.
+// On first load with default model, it shows "ソナー" / "Sonar".
+export const MODEL_PICKER_BUTTON_TEXTS = ['Sonar', 'ソナー', 'Select model', 'モデルを選択'];

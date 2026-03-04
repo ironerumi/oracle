@@ -15,12 +15,12 @@ export function resolvePerplexityTimeout(model: string | null | undefined, confi
 }
 
 /**
- * Resolve the UI label for a Perplexity model.
- * Returns null if the model is 'sonar' (default, no picker change needed).
+ * Resolve the UI labels for a Perplexity model (locale-aware array).
+ * All sonar variants map to ["Sonar", "ソナー"] — the web UI doesn't distinguish tiers.
+ * Returns null for unknown models.
  */
-export function resolvePerplexityModelLabel(model: string | null | undefined): string | null {
-  const m = model?.trim() ?? 'sonar';
-  if (m === 'sonar') return null; // default model — no picker interaction needed
+export function resolvePerplexityModelLabels(model: string | null | undefined): string[] | null {
+  const m = model?.trim() || 'sonar';
   return PERPLEXITY_MODEL_LABELS[m] ?? null;
 }
 

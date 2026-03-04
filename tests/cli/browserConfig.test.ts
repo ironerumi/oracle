@@ -187,24 +187,24 @@ describe('buildBrowserConfig', () => {
 });
 
 describe('Perplexity model labels', () => {
-  test('maps sonar to Default browser label', async () => {
+  test('maps sonar to Sonar browser label', async () => {
     const config = await buildBrowserConfig({ model: 'sonar' });
-    expect(config.desiredModel).toBe('Default');
+    expect(config.desiredModel).toBe('Sonar');
   });
 
-  test('maps sonar-pro to Pro browser label', async () => {
+  test('maps sonar-pro to Sonar browser label', async () => {
     const config = await buildBrowserConfig({ model: 'sonar-pro' });
-    expect(config.desiredModel).toBe('Pro');
+    expect(config.desiredModel).toBe('Sonar');
   });
 
-  test('maps sonar-reasoning-pro to Reasoning Pro browser label', async () => {
+  test('maps sonar-reasoning-pro to Sonar browser label', async () => {
     const config = await buildBrowserConfig({ model: 'sonar-reasoning-pro' });
-    expect(config.desiredModel).toBe('Reasoning Pro');
+    expect(config.desiredModel).toBe('Sonar');
   });
 
-  test('maps sonar-deep-research to Deep Research browser label', async () => {
+  test('maps sonar-deep-research to Sonar browser label', async () => {
     const config = await buildBrowserConfig({ model: 'sonar-deep-research' });
-    expect(config.desiredModel).toBe('Deep Research');
+    expect(config.desiredModel).toBe('Sonar');
   });
 });
 

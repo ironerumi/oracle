@@ -3,7 +3,8 @@ import { BrowserAutomationError } from '../../oracle/errors.js';
 import {
   RESPONSE_PROSE_SELECTOR,
   COPY_BUTTON_SELECTORS,
-  CITATION_SELECTOR,
+  SOURCES_TAB_TEXTS,
+  TAB_SELECTOR,
 } from '../constants.js';
 
 type Runtime = ChromeClient['Runtime'];
@@ -23,7 +24,8 @@ export interface Citation {
  * Wait for the Perplexity response to complete, then extract text and citations.
  *
  * Completion signal: the Copy button appears after streaming ends.
- * Citations are extracted from span.citation.inline elements.
+ * Citations: extracted from the "Links" tab panel (NOT inline citation spans,
+ * which are just popover triggers with domain+count text).
  */
 export async function capturePerplexityResponse(
   runtime: Runtime,
@@ -44,10 +46,10 @@ export async function capturePerplexityResponse(
     );
   }
 
-  // 3. Extract citations
-  const citations = await extractCitations(runtime);
+  // 3. Extract source URLs from the Links tab
+  const citations = await extractSourcesFromLinksTab(runtime, log);
   log?.(
-    `[perplexity-browser] Captured response: ${text.length} chars, ${citations.length} citation(s)`,
+    `[perplexity-browser] Captured response: ${text.length} chars, ${citations.length} source(s)`,
   );
 
   return { text, citations };
@@ -59,10 +61,6 @@ export async function capturePerplexityResponse(
 export function formatWithCitations(text: string, citations: Citation[]): string {
   if (!citations.length) return text;
 
-  // Build footnote reference map
-  let markdown = text;
-
-  // Append footnote definitions
   const footnotes = citations
     .map((c) => {
       const target = c.url ?? c.label;
@@ -70,7 +68,7 @@ export function formatWithCitations(text: string, citations: Citation[]): string
     })
     .join('\n');
 
-  return `${markdown}\n\n${footnotes}`;
+  return `${text}\n\n${footnotes}`;
 }
 
 async function waitForCompletion(runtime: Runtime, timeoutMs: number, log?: BrowserLogger): Promise<void> {
@@ -83,20 +81,14 @@ async function waitForCompletion(runtime: Runtime, timeoutMs: number, log?: Brow
     const result = await runtime.evaluate({
       expression: `(() => {
         const copySelectors = ${copySelectors};
-        // Check for copy button (primary completion signal)
         for (const sel of copySelectors) {
           if (document.querySelector(sel)) return { done: true, signal: 'copy-button' };
         }
-        // Check for follow-up suggestion buttons (secondary signal)
-        // These appear as a grid/list of buttons after the response
         const followUps = document.querySelectorAll('[role="tabpanel"] button');
         let suggestionCount = 0;
         for (const btn of followUps) {
           const text = btn.textContent?.trim() ?? '';
-          // Follow-up suggestions are typically longer than action buttons
-          if (text.length > 15 && text.length < 200) {
-            suggestionCount++;
-          }
+          if (text.length > 15 && text.length < 200) suggestionCount++;
         }
         if (suggestionCount >= 3) return { done: true, signal: 'follow-up-suggestions' };
         return { done: false };
@@ -106,7 +98,6 @@ async function waitForCompletion(runtime: Runtime, timeoutMs: number, log?: Brow
 
     if (result.result?.value?.done) {
       log?.(`[perplexity-browser] Response complete (signal: ${result.result.value.signal})`);
-      // Small settle time after completion signal
       await new Promise((r) => setTimeout(r, 500));
       return;
     }
@@ -134,7 +125,6 @@ async function extractResponseText(runtime: Runtime): Promise<string> {
     expression: `(() => {
       const container = document.querySelector(${proseSelector});
       if (!container) return '';
-      // Get text content, preserving paragraph breaks
       const paragraphs = container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, pre, blockquote');
       if (paragraphs.length === 0) return container.innerText?.trim() ?? '';
       const parts = [];
@@ -144,7 +134,7 @@ async function extractResponseText(runtime: Runtime): Promise<string> {
         if (!text) continue;
         if (tag.startsWith('h')) {
           const level = parseInt(tag[1], 10);
-          text = '${'#'.repeat(1)}' + '#'.repeat(level) + ' ' + text;
+          text = '#'.repeat(level) + ' ' + text;
         } else if (tag === 'li') {
           text = '- ' + text;
         } else if (tag === 'pre') {
@@ -162,41 +152,92 @@ async function extractResponseText(runtime: Runtime): Promise<string> {
   return (result.result?.value ?? '') as string;
 }
 
-async function extractCitations(runtime: Runtime): Promise<Citation[]> {
-  const citationSel = JSON.stringify(CITATION_SELECTOR);
+/**
+ * Extract source URLs from the Links/Sources tab panel.
+ *
+ * Live inspection confirmed: citation URLs are NOT in inline spans (those are
+ * popover triggers). Real URLs are only available in the "リンク" (Links) tab.
+ * We programmatically activate the tab, extract a[href] links, then switch back.
+ */
+async function extractSourcesFromLinksTab(runtime: Runtime, log?: BrowserLogger): Promise<Citation[]> {
+  const tabTexts = JSON.stringify(SOURCES_TAB_TEXTS);
+  const tabSelector = JSON.stringify(TAB_SELECTOR);
+
   const result = await runtime.evaluate({
-    expression: `(() => {
-      const citations = document.querySelectorAll(${citationSel});
-      const results = [];
-      let index = 1;
-      for (const el of citations) {
-        const label = el.textContent?.trim() ?? '';
-        if (!label) continue;
-        // Try to find an anchor link parent or nearby
-        const anchor = el.closest('a') ?? el.querySelector('a');
-        const url = anchor?.href ?? null;
-        results.push({ index, label, url });
-        index++;
-      }
-      // Also try to extract from a Sources panel/tab if present
-      const sourceLinks = document.querySelectorAll('[role="tabpanel"] a[href^="http"]');
-      const urlSet = new Set(results.map(r => r.url).filter(Boolean));
-      for (const link of sourceLinks) {
-        const href = link.href;
-        if (href && !urlSet.has(href) && !href.includes('perplexity.ai')) {
-          // This is a source link not yet captured
-          const linkLabel = link.textContent?.trim() || new URL(href).hostname;
-          results.push({ index, label: linkLabel, url: href });
-          urlSet.add(href);
-          index++;
+    expression: `(async () => {
+      const tabTexts = ${tabTexts};
+      const tabs = document.querySelectorAll(${tabSelector});
+      let linksTab = null;
+      let answerTab = null;
+
+      for (const tab of tabs) {
+        const text = tab.textContent?.trim() ?? '';
+        if (tabTexts.some(t => text.includes(t))) {
+          linksTab = tab;
+        }
+        const isActive = tab.getAttribute('data-state') === 'active' || tab.getAttribute('aria-selected') === 'true';
+        if (isActive) {
+          answerTab = tab;
         }
       }
-      return results;
+
+      if (!linksTab) return { sources: [], error: 'links-tab-not-found' };
+
+      // Activate the Links tab using full pointer event sequence
+      // (plain .click() doesn't trigger React/Radix tab switching)
+      const rect = linksTab.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const evtOpts = { bubbles: true, cancelable: true, clientX: x, clientY: y };
+      linksTab.dispatchEvent(new PointerEvent('pointerdown', evtOpts));
+      linksTab.dispatchEvent(new MouseEvent('mousedown', evtOpts));
+      linksTab.dispatchEvent(new PointerEvent('pointerup', evtOpts));
+      linksTab.dispatchEvent(new MouseEvent('mouseup', evtOpts));
+      linksTab.click();
+
+      // Wait for tab panel to render
+      await new Promise(r => setTimeout(r, 800));
+
+      // Extract links from the now-active panel
+      const links = document.querySelectorAll('a[href^="http"]');
+      const sources = [];
+      let index = 1;
+      const seen = new Set();
+      for (const link of links) {
+        const href = link.href;
+        if (!href || href.includes('perplexity.ai') || seen.has(href)) continue;
+        seen.add(href);
+        const label = link.textContent?.trim() || '';
+        try {
+          const hostname = new URL(href).hostname;
+          sources.push({ index, label: label || hostname, url: href });
+          index++;
+        } catch {}
+      }
+
+      // Switch back to the Answer tab
+      if (answerTab && answerTab !== linksTab) {
+        const aRect = answerTab.getBoundingClientRect();
+        const ax = aRect.left + aRect.width / 2;
+        const ay = aRect.top + aRect.height / 2;
+        const aOpts = { bubbles: true, cancelable: true, clientX: ax, clientY: ay };
+        answerTab.dispatchEvent(new PointerEvent('pointerdown', aOpts));
+        answerTab.dispatchEvent(new MouseEvent('mousedown', aOpts));
+        answerTab.dispatchEvent(new PointerEvent('pointerup', aOpts));
+        answerTab.dispatchEvent(new MouseEvent('mouseup', aOpts));
+        answerTab.click();
+      }
+
+      return { sources, error: null };
     })()`,
     returnByValue: true,
+    awaitPromise: true,
   });
 
-  const raw = result.result?.value;
-  if (!Array.isArray(raw)) return [];
-  return raw as Citation[];
+  const value = result.result?.value as { sources: Citation[]; error: string | null } | undefined;
+  if (value?.error) {
+    log?.(`[perplexity-browser] Could not extract sources: ${value.error}`);
+    return [];
+  }
+  return value?.sources ?? [];
 }

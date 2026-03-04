@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   resolvePerplexityTimeout,
-  resolvePerplexityModelLabel,
+  resolvePerplexityModelLabels,
   DEFAULT_TIMEOUT_MS,
   DEEP_RESEARCH_TIMEOUT_MS,
 } from '../../src/perplexity-browser/config.js';
@@ -32,24 +32,22 @@ describe('resolvePerplexityTimeout', () => {
   });
 });
 
-describe('resolvePerplexityModelLabel', () => {
-  test('returns null for default sonar model', () => {
-    expect(resolvePerplexityModelLabel('sonar')).toBeNull();
-  });
-
-  test('returns label for known models', () => {
-    expect(resolvePerplexityModelLabel('sonar-pro')).toBe('Pro');
-    expect(resolvePerplexityModelLabel('sonar-reasoning-pro')).toBe('Reasoning Pro');
-    expect(resolvePerplexityModelLabel('sonar-deep-research')).toBe('Deep Research');
+describe('resolvePerplexityModelLabels', () => {
+  test('returns locale-aware labels for all sonar variants', () => {
+    // All sonar API models map to the same "Sonar" picker entry
+    expect(resolvePerplexityModelLabels('sonar')).toEqual(['Sonar', 'ソナー']);
+    expect(resolvePerplexityModelLabels('sonar-pro')).toEqual(['Sonar', 'ソナー']);
+    expect(resolvePerplexityModelLabels('sonar-reasoning-pro')).toEqual(['Sonar', 'ソナー']);
+    expect(resolvePerplexityModelLabels('sonar-deep-research')).toEqual(['Sonar', 'ソナー']);
   });
 
   test('returns null for unknown model', () => {
-    expect(resolvePerplexityModelLabel('unknown-model')).toBeNull();
+    expect(resolvePerplexityModelLabels('unknown-model')).toBeNull();
   });
 
-  test('returns null for null/undefined/empty', () => {
-    expect(resolvePerplexityModelLabel(null)).toBeNull();
-    expect(resolvePerplexityModelLabel(undefined)).toBeNull();
-    expect(resolvePerplexityModelLabel('')).toBeNull();
+  test('returns Sonar labels for null/undefined/empty (defaults to sonar)', () => {
+    expect(resolvePerplexityModelLabels(null)).toEqual(['Sonar', 'ソナー']);
+    expect(resolvePerplexityModelLabels(undefined)).toEqual(['Sonar', 'ソナー']);
+    expect(resolvePerplexityModelLabels('')).toEqual(['Sonar', 'ソナー']);
   });
 });
