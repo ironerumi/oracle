@@ -24,11 +24,16 @@ export async function selectPerplexityModel(
   desiredModel: string | null | undefined,
   log?: BrowserLogger,
 ): Promise<void> {
-  const model = (desiredModel?.trim() ?? 'sonar').toLowerCase();
-  const labels = PERPLEXITY_MODEL_LABELS[model];
+  const raw = desiredModel?.trim() ?? '';
+  const model = raw.toLowerCase() || 'sonar';
+  const knownLabels = PERPLEXITY_MODEL_LABELS[model];
+
+  // Known model → use locale-aware labels; unknown → use raw string as picker label passthrough.
+  // This lets --browser-model-label "Claude Sonnet 4.6" work without a static map entry.
+  const labels = knownLabels ?? (raw ? [raw] : null);
 
   if (!labels) {
-    log?.(`[perplexity-browser] Unknown model "${model}" — no label mapping. Skipping model picker.`);
+    log?.(`[perplexity-browser] No model specified and no default — skipping model picker.`);
     return;
   }
 

@@ -98,7 +98,19 @@ async function waitForCompletion(runtime: Runtime, timeoutMs: number, log?: Brow
 
     if (result.result?.value?.done) {
       log?.(`[perplexity-browser] Response complete (signal: ${result.result.value.signal})`);
-      await new Promise((r) => setTimeout(r, 500));
+      // Wait for DOM rendering to finish — copy button can appear before
+      // the last chunk of text is rendered. Poll until text stabilizes.
+      let prevLen = 0;
+      for (let i = 0; i < 5; i++) {
+        await new Promise((r) => setTimeout(r, 800));
+        const lenCheck = await runtime.evaluate({
+          expression: `(document.querySelector('[role="tabpanel"] .prose')?.innerText?.length ?? 0)`,
+          returnByValue: true,
+        });
+        const curLen = (lenCheck.result?.value ?? 0) as number;
+        if (curLen > 0 && curLen === prevLen) break;
+        prevLen = curLen;
+      }
       return;
     }
 

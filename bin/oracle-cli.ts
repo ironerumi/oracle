@@ -1023,6 +1023,12 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     engine = 'api';
   }
   if (normalizedMultiModels.length > 0) {
+    if (isPerplexity && (engine === 'browser' || userForcedBrowser)) {
+      throw new Error(
+        'Perplexity browser mode supports a single model only. ' +
+        'Remove --models or use --engine api with PERPLEXITY_API_KEY for multi-model runs.',
+      );
+    }
     engine = 'api';
   }
   if (remoteHost && normalizedMultiModels.length > 0) {
