@@ -37,7 +37,7 @@ export async function capturePerplexityResponse(
   await waitForCompletion(page, timeoutMs, log);
 
   // 2. Extract response text from the prose container
-  const text = await extractResponseText(page);
+  const text = await extractResponseText(page, log);
   if (!text) {
     throw new BrowserAutomationError(
       'Response completed but no text found in the response container.',
@@ -97,9 +97,20 @@ async function waitForCompletion(page: Page, timeoutMs: number, log?: BrowserLog
       let prevLen = 0;
       for (let i = 0; i < 5; i++) {
         await new Promise((r) => setTimeout(r, 800));
-        const curLen = await page.evaluate(
-          () => (document.querySelector('[role="tabpanel"] .prose') as HTMLElement)?.innerText?.length ?? 0,
-        );
+        const curLen = await page.evaluate(() => {
+          // Try tabpanel .prose first, then broader fallbacks (Deep Research uses different containers)
+          const candidates = [
+            '[role="tabpanel"] .prose',
+            '.prose',
+            '[class*="markdown"]',
+            'main [class*="response"]',
+          ];
+          for (const sel of candidates) {
+            const el = document.querySelector(sel) as HTMLElement | null;
+            if (el?.innerText?.length) return el.innerText.length;
+          }
+          return 0;
+        });
         if (curLen > 0 && curLen === prevLen) break;
         prevLen = curLen;
       }
@@ -123,10 +134,26 @@ async function waitForCompletion(page: Page, timeoutMs: number, log?: BrowserLog
   );
 }
 
-async function extractResponseText(page: Page): Promise<string> {
+async function extractResponseText(page: Page, log?: BrowserLogger): Promise<string> {
   return await page.evaluate((proseSelector: string) => {
-    const container = document.querySelector(proseSelector) as HTMLElement | null;
+    // Try selectors in priority order — Deep Research uses different containers
+    const candidates = [
+      proseSelector,                    // [role="tabpanel"] .prose — standard response
+      '.prose',                         // .prose outside tabpanel — DR reports
+      '[class*="markdown"]',            // markdown-styled container
+    ];
+
+    let container: HTMLElement | null = null;
+    for (const sel of candidates) {
+      const el = document.querySelector(sel) as HTMLElement | null;
+      if (el?.innerText?.trim()) {
+        container = el;
+        break;
+      }
+    }
+
     if (!container) return '';
+
     const paragraphs = container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, pre, blockquote');
     if (paragraphs.length === 0) return container.innerText?.trim() ?? '';
     const parts: string[] = [];
