@@ -1237,6 +1237,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       executeBrowser: createPerplexityBrowserExecutor(browserConfig, {
         space: options.space,
         cookieFilePath: resolveCookieFilePath(options),
+        cliModel: resolvedModel,
       }),
     };
     console.log(chalk.dim('Using Perplexity browser engine for automation'));
