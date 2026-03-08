@@ -45,6 +45,11 @@ export function resolveEngine(
   return env.OPENAI_API_KEY ? 'api' : 'browser';
 }
 
+/** Check if a model is supported by the browser engine. */
+export function isBrowserCompatible(model: string): boolean {
+  return model.startsWith('gpt-') || model.startsWith('gemini') || model.startsWith('sonar');
+}
+
 function normalizeEngineMode(raw: unknown): EngineMode | null {
   if (typeof raw !== 'string') {
     return null;

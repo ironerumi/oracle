@@ -104,7 +104,7 @@ async function waitForCompletion(page: Page, timeoutMs: number, log?: BrowserLog
       for (let i = 0; i < 5; i++) {
         await new Promise((r) => setTimeout(r, 800));
         const curLen = await page.evaluate(
-          () => (document.querySelector('[role="tabpanel"] .prose') as HTMLElement)?.innerText?.length ?? 0,
+          (sel: string) => (document.querySelector(sel) as HTMLElement)?.innerText?.length ?? 0, RESPONSE_PROSE_SELECTOR,
         );
         if (curLen > 0 && curLen === prevLen) break;
         prevLen = curLen;
@@ -213,7 +213,8 @@ async function extractSourcesFromLinksTab(page: Page, log?: BrowserLogger): Prom
 
   // Step 3: Extract links
   const sources = await page.evaluate(() => {
-    const links = document.querySelectorAll('a[href^="http"]');
+    const panel = document.querySelector('[role="tabpanel"]') || document;
+    const links = panel.querySelectorAll('a[href^="http"]');
     const result: Array<{ index: number; label: string; url: string }> = [];
     let index = 1;
     const seen = new Set<string>();

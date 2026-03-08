@@ -2,7 +2,7 @@ import type { RunOracleOptions, ModelName } from '../oracle.js';
 import { DEFAULT_MODEL, MODEL_CONFIGS } from '../oracle.js';
 import type { UserConfig } from '../config.js';
 import type { EngineMode } from './engine.js';
-import { resolveEngine } from './engine.js';
+import { resolveEngine, isBrowserCompatible } from './engine.js';
 import { normalizeModelOption, inferModelFromLabel, resolveApiModel, normalizeBaseUrl } from './options.js';
 import { resolveGeminiModelId } from '../oracle/gemini.js';
 import { PromptValidationError } from '../oracle/errors.js';
@@ -57,7 +57,6 @@ export function resolveRunOptionsFromConfig({
     normalizedRequestedModels.length > 0
       ? Array.from(new Set(normalizedRequestedModels.map((entry) => resolveApiModel(entry))))
       : [resolvedModel];
-  const isBrowserCompatible = (m: string) => m.startsWith('gpt-') || m.startsWith('gemini') || m.startsWith('sonar');
   const hasNonBrowserCompatibleTarget = (browserRequested || browserConfigured) && allModels.some((m) => !isBrowserCompatible(m));
   if (hasNonBrowserCompatibleTarget) {
     throw new PromptValidationError(

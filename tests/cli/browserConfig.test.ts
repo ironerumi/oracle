@@ -187,24 +187,27 @@ describe('buildBrowserConfig', () => {
 });
 
 describe('Perplexity model labels', () => {
-  test('maps sonar to Sonar browser label', async () => {
+  // Perplexity desiredModel stores the raw model name — the Perplexity executor
+  // derives the browser label internally via PERPLEXITY_MODEL_LABELS.
+  // This differs from ChatGPT models, which store the browser label directly.
+  test('stores raw sonar model name (executor derives label)', async () => {
     const config = await buildBrowserConfig({ model: 'sonar' });
-    expect(config.desiredModel).toBe('Sonar');
+    expect(config.desiredModel).toBe('sonar');
   });
 
-  test('maps sonar-pro to Sonar browser label', async () => {
+  test('stores raw sonar-pro model name', async () => {
     const config = await buildBrowserConfig({ model: 'sonar-pro' });
-    expect(config.desiredModel).toBe('Sonar');
+    expect(config.desiredModel).toBe('sonar-pro');
   });
 
-  test('maps sonar-reasoning-pro to Sonar browser label', async () => {
+  test('stores raw sonar-reasoning-pro model name', async () => {
     const config = await buildBrowserConfig({ model: 'sonar-reasoning-pro' });
-    expect(config.desiredModel).toBe('Sonar');
+    expect(config.desiredModel).toBe('sonar-reasoning-pro');
   });
 
-  test('maps sonar-deep-research to Sonar browser label', async () => {
+  test('stores raw sonar-deep-research model name', async () => {
     const config = await buildBrowserConfig({ model: 'sonar-deep-research' });
-    expect(config.desiredModel).toBe('Sonar');
+    expect(config.desiredModel).toBe('sonar-deep-research');
   });
 });
 

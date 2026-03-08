@@ -38,15 +38,6 @@ export const SOURCES_TAB_TEXTS = ['Links', 'リンク', 'Sources'];
 // --- Response container ---
 // Tailwind prose container inside a Radix UI tab panel.
 export const RESPONSE_PROSE_SELECTOR = '[role="tabpanel"] .prose';
-export const TABPANEL_SELECTOR = '[role="tabpanel"]';
-
-// --- Query heading ---
-export const QUERY_HEADING_SELECTOR = 'h1';
-
-// --- Citations ---
-// Inline citation badges (e.g. "wikipedia+1", "github+2").
-export const CITATION_SELECTOR = 'span.citation.inline';
-export const CITATION_NBSP_SELECTOR = 'span.citation-nbsp';
 
 // --- Completion signals ---
 // Follow-up suggestions and action buttons appear only after response streaming ends.
@@ -58,7 +49,6 @@ export const COPY_BUTTON_SELECTORS = [
 
 // --- Tabs ---
 export const TAB_SELECTOR = '[role="tab"]';
-export const ACTIVE_TAB_SELECTOR = '[role="tab"][data-state="active"]';
 
 // --- Cloudflare challenge detection ---
 export const CLOUDFLARE_TITLES = ['just a moment', 'しばらくお待ちください'];

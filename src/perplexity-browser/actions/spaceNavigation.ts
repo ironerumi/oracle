@@ -2,7 +2,6 @@ import type { Page } from 'playwright-core';
 import type { BrowserLogger } from '../../browser/types.js';
 import { BrowserAutomationError } from '../../oracle/errors.js';
 import { buildSpaceUrl } from '../constants.js';
-import { waitForDocumentReady } from './navigation.js';
 
 /**
  * Resolve a --space argument to a full Perplexity Space URL.
@@ -74,7 +73,6 @@ export async function navigateToSpace(
   log?.(`[perplexity-browser] Navigating to Space: ${url}`);
 
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-  await waitForDocumentReady(page, 30_000);
 
   // Verify we landed on the space (not redirected to home or 404)
   const currentUrl = await page.evaluate(() => location.href);

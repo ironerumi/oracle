@@ -12,7 +12,7 @@ if (process.argv[2] === 'oracle-mcp') {
   await startMcpServer();
   process.exit(0);
 }
-import { resolveEngine, type EngineMode, defaultWaitPreference } from '../src/cli/engine.js';
+import { resolveEngine, isBrowserCompatible, type EngineMode, defaultWaitPreference } from '../src/cli/engine.js';
 import { shouldRequirePrompt } from '../src/cli/promptRequirement.js';
 import chalk from 'chalk';
 import type { SessionMetadata, SessionMode, BrowserSessionConfig } from '../src/sessionStore.js';
@@ -1003,7 +1003,6 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   const isCodex = primaryModelCandidate.startsWith('gpt-5.1-codex');
   const isClaude = primaryModelCandidate.startsWith('claude');
   const userForcedBrowser = options.browser || options.engine === 'browser';
-  const isBrowserCompatible = (model: string) => model.startsWith('gpt-') || model.startsWith('gemini') || model.startsWith('sonar');
   const hasNonBrowserCompatibleTarget =
     (engine === 'browser' || userForcedBrowser) &&
     (normalizedMultiModels.length > 0

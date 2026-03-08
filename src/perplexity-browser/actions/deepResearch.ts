@@ -1,10 +1,10 @@
 import type { Page } from 'playwright-core';
 import type { BrowserLogger } from '../../browser/types.js';
 import {
-  ADD_TOOLS_BUTTON_LABELS,
   DEEP_RESEARCH_ICON_ID,
   DEEP_RESEARCH_TEXTS,
 } from '../constants.js';
+import { openAddToolsMenu, dismissRadixMenu } from './radixUtils.js';
 
 /**
  * Activate Deep Research mode in Perplexity's web UI.
@@ -38,31 +38,11 @@ export async function activateDeepResearch(
     return;
   }
 
-  // Step 1: Open the [+] "Add tools" menu (pointer events required for Radix)
-  const openResult = await page.evaluate((labels: string[]) => {
-    const buttons = document.querySelectorAll('button');
-    for (const btn of buttons) {
-      const label = btn.getAttribute('aria-label') ?? '';
-      if (labels.some(l => label.includes(l))) {
-        const rect = btn.getBoundingClientRect();
-        const evt = { bubbles: true, cancelable: true, clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2 };
-        btn.dispatchEvent(new PointerEvent('pointerdown', evt));
-        btn.dispatchEvent(new MouseEvent('mousedown', evt));
-        btn.dispatchEvent(new PointerEvent('pointerup', evt));
-        btn.dispatchEvent(new MouseEvent('mouseup', evt));
-        btn.dispatchEvent(new MouseEvent('click', evt));
-        return { found: true, label };
-      }
-    }
-    return { found: false };
-  }, ADD_TOOLS_BUTTON_LABELS);
-
-  if (!openResult?.found) {
-    log?.('[perplexity-browser] Could not find "Add tools" button — cannot activate Deep Research');
+  // Step 1: Open the [+] "Add tools" menu
+  if (!await openAddToolsMenu(page, log)) {
+    log?.('[perplexity-browser] Cannot activate Deep Research — "Add tools" button not found');
     return;
   }
-
-  await new Promise((r) => setTimeout(r, 500));
 
   // Step 2: Find and click the Deep Research item (pointer events for Radix)
   const toggleResult = await page.evaluate(
@@ -131,14 +111,5 @@ export async function activateDeepResearch(
   }
 
   // Step 3: Close menu
-  await new Promise((r) => setTimeout(r, 300));
-  await page.evaluate(() => {
-    const main = document.querySelector('main') || document.body;
-    const evt = { bubbles: true, cancelable: true, clientX: 10, clientY: 10 };
-    main.dispatchEvent(new PointerEvent('pointerdown', evt));
-    main.dispatchEvent(new MouseEvent('mousedown', evt));
-    main.dispatchEvent(new PointerEvent('pointerup', evt));
-    main.dispatchEvent(new MouseEvent('mouseup', evt));
-  });
-  await new Promise((r) => setTimeout(r, 300));
+  await dismissRadixMenu(page);
 }

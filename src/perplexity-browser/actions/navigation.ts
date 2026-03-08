@@ -13,24 +13,6 @@ export async function navigateToPerplexity(
 ): Promise<void> {
   log?.(`[perplexity-browser] Navigating to ${url}`);
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-  await waitForDocumentReady(page, 45_000);
-}
-
-/**
- * Wait for document.readyState to be 'complete' or 'interactive'.
- */
-export async function waitForDocumentReady(page: Page, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const state = await page.evaluate(() => document.readyState);
-    if (state === 'complete' || state === 'interactive') {
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new BrowserAutomationError('Timed out waiting for page to load', {
-    stage: 'navigation',
-  });
 }
 
 /**

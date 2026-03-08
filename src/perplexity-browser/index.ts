@@ -75,7 +75,7 @@ export function createPerplexityBrowserExecutor(
     try {
       // Watch for premature browser close
       const disconnectPromise = new Promise<never>((_, reject) => {
-        browser.on('disconnected', () => {
+        browser.once('disconnected', () => {
           reject(new BrowserAutomationError(
             'Browser closed before Perplexity response was captured.',
             { stage: 'browser-disconnect' },
