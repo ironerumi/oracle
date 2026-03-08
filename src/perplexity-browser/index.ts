@@ -6,7 +6,6 @@ import type { BrowserSessionConfig } from '../sessionStore.js';
 import {
   launchChrome,
   registerTerminationHooks,
-  hideChromeWindow,
   connectWithNewTab,
   closeTab,
 } from '../browser/chromeLifecycle.js';
@@ -21,6 +20,7 @@ import { navigateToSpace } from './actions/spaceNavigation.js';
 import { submitPerplexityPrompt } from './actions/promptSubmit.js';
 import { capturePerplexityResponse, formatWithCitations } from './actions/responseCapture.js';
 import { enableSocialSource } from './actions/sourceFilter.js';
+import { activateDeepResearch } from './actions/deepResearch.js';
 
 export interface PerplexityBrowserOptions {
   /** Perplexity Space slug or full URL. */
@@ -103,11 +103,6 @@ export function createPerplexityBrowserExecutor(
     const chromeHost = (chrome as unknown as { host?: string }).host ?? '127.0.0.1';
     const removeHooks = registerTerminationHooks(chrome, userDataDir, false, log);
 
-    // Hide Chrome window by default (headful for Cloudflare bypass, but no visible popup)
-    if (resolvedConfig.hideWindow && !resolvedConfig.headless) {
-      await hideChromeWindow(chrome, log);
-    }
-
     let client: ChromeClient | null = null;
     let isolatedTargetId: string | undefined;
 
@@ -128,7 +123,22 @@ export function createPerplexityBrowserExecutor(
       });
       const race = <T>(p: Promise<T>): Promise<T> => Promise.race([p, disconnectPromise]);
 
-      const { Network, Page, Runtime, Input } = client;
+      const { Network, Page, Runtime, Input, Browser, Emulation } = client;
+
+      // Hide Chrome window: shrink to tiny physical window but emulate full viewport.
+      // Cannot minimize (Chrome defers DOM rendering) or use headless (Cloudflare blocks).
+      // Cannot use AppleScript (needs Accessibility permissions).
+      // Solution: tiny physical window + virtual viewport via Emulation.
+      if (resolvedConfig.hideWindow && !resolvedConfig.headless) {
+        try {
+          const { windowId } = await Browser.getWindowForTarget({ targetId: isolatedTargetId });
+          await Browser.setWindowBounds({ windowId, bounds: { windowState: 'normal', left: 0, top: 0, width: 100, height: 100 } });
+          await Emulation.setDeviceMetricsOverride({ width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+          log('[perplexity-browser] Chrome window hidden (100x100 physical, 1280x720 virtual)');
+        } catch (e) {
+          log(`[perplexity-browser] Could not hide window via CDP: ${e instanceof Error ? e.message : e}`);
+        }
+      }
 
       // Enable CDP domains
       await Promise.all([Network.enable({}), Page.enable(), Runtime.enable()]);
@@ -195,6 +205,12 @@ export function createPerplexityBrowserExecutor(
 
       // Enable Social source filter (always on for richer results)
       await race(enableSocialSource(Runtime, log));
+
+      // Activate Deep Research mode for sonar-deep-research
+      const normalizedModel = (resolvedConfig.desiredModel?.trim() || 'sonar').toLowerCase();
+      if (normalizedModel === 'sonar-deep-research') {
+        await race(activateDeepResearch(Runtime, log));
+      }
 
       // Submit prompt
       await race(submitPerplexityPrompt(Runtime, Input, promptText, log));

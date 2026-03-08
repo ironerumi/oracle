@@ -105,3 +105,12 @@ export const SOURCE_ICON_IDS: Record<string, string> = {
   academic: '#pplx-icon-books',
   social: '#pplx-icon-social',
 };
+
+// --- Deep Research toggle (same [+] menu, top-level menuitemradio) ---
+// Activation: click "Add files or tools" button → click menuitemradio with telescope icon.
+// NOT inside "Connectors & Sources" submenu — it's a direct child of the [+] menu.
+// Icon: <use xlink:href="#pplx-icon-telescope"> inside a [role="menuitemradio"]
+// State: aria-checked="true"/"false", data-state="checked"/"unchecked"
+// Toolbar indicator when active: button containing <use xlink:href="#pplx-icon-telescope">
+export const DEEP_RESEARCH_ICON_ID = '#pplx-icon-telescope';
+export const DEEP_RESEARCH_TEXTS = ['Deep Research', '深い研究'];
