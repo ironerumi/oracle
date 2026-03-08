@@ -37,7 +37,7 @@ export async function capturePerplexityResponse(
   await waitForCompletion(page, timeoutMs, log);
 
   // 2. Extract response text from the prose container
-  const text = await extractResponseText(page, log);
+  const text = await extractResponseText(page);
   if (!text) {
     throw new BrowserAutomationError(
       'Response completed but no text found in the response container.',
@@ -76,19 +76,25 @@ async function waitForCompletion(page: Page, timeoutMs: number, log?: BrowserLog
   let lastLogAt = 0;
 
   while (Date.now() < deadline) {
-    const result = await page.evaluate((copySelectors: string[]) => {
-      for (const sel of copySelectors) {
+    const result = await page.evaluate((args: { copySelectors: string[]; proseSelector: string }) => {
+      // Primary signal: copy button (appears only after streaming ends — most reliable)
+      for (const sel of args.copySelectors) {
         if (document.querySelector(sel)) return { done: true, signal: 'copy-button' };
       }
-      const followUps = document.querySelectorAll('[role="tabpanel"] button');
-      let suggestionCount = 0;
-      for (const btn of followUps) {
-        const text = btn.textContent?.trim() ?? '';
-        if (text.length > 15 && text.length < 200) suggestionCount++;
+      // Secondary signal: follow-up suggestions — but only if response text exists.
+      // DR progress UI can have buttons that match the heuristic before the real response.
+      const hasProse = !!(document.querySelector(args.proseSelector) as HTMLElement)?.innerText?.trim();
+      if (hasProse) {
+        const followUps = document.querySelectorAll('[role="tabpanel"] button');
+        let suggestionCount = 0;
+        for (const btn of followUps) {
+          const text = btn.textContent?.trim() ?? '';
+          if (text.length > 15 && text.length < 200) suggestionCount++;
+        }
+        if (suggestionCount >= 3) return { done: true, signal: 'follow-up-suggestions' };
       }
-      if (suggestionCount >= 3) return { done: true, signal: 'follow-up-suggestions' };
       return { done: false };
-    }, COPY_BUTTON_SELECTORS);
+    }, { copySelectors: COPY_BUTTON_SELECTORS, proseSelector: RESPONSE_PROSE_SELECTOR });
 
     if (result?.done) {
       log?.(`[perplexity-browser] Response complete (signal: ${result.signal})`);
@@ -97,20 +103,9 @@ async function waitForCompletion(page: Page, timeoutMs: number, log?: BrowserLog
       let prevLen = 0;
       for (let i = 0; i < 5; i++) {
         await new Promise((r) => setTimeout(r, 800));
-        const curLen = await page.evaluate(() => {
-          // Try tabpanel .prose first, then broader fallbacks (Deep Research uses different containers)
-          const candidates = [
-            '[role="tabpanel"] .prose',
-            '.prose',
-            '[class*="markdown"]',
-            'main [class*="response"]',
-          ];
-          for (const sel of candidates) {
-            const el = document.querySelector(sel) as HTMLElement | null;
-            if (el?.innerText?.length) return el.innerText.length;
-          }
-          return 0;
-        });
+        const curLen = await page.evaluate(
+          () => (document.querySelector('[role="tabpanel"] .prose') as HTMLElement)?.innerText?.length ?? 0,
+        );
         if (curLen > 0 && curLen === prevLen) break;
         prevLen = curLen;
       }
@@ -134,24 +129,9 @@ async function waitForCompletion(page: Page, timeoutMs: number, log?: BrowserLog
   );
 }
 
-async function extractResponseText(page: Page, log?: BrowserLogger): Promise<string> {
+async function extractResponseText(page: Page): Promise<string> {
   return await page.evaluate((proseSelector: string) => {
-    // Try selectors in priority order — Deep Research uses different containers
-    const candidates = [
-      proseSelector,                    // [role="tabpanel"] .prose — standard response
-      '.prose',                         // .prose outside tabpanel — DR reports
-      '[class*="markdown"]',            // markdown-styled container
-    ];
-
-    let container: HTMLElement | null = null;
-    for (const sel of candidates) {
-      const el = document.querySelector(sel) as HTMLElement | null;
-      if (el?.innerText?.trim()) {
-        container = el;
-        break;
-      }
-    }
-
+    const container = document.querySelector(proseSelector) as HTMLElement | null;
     if (!container) return '';
 
     const paragraphs = container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, pre, blockquote');
