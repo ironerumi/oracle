@@ -137,24 +137,25 @@ Test if `page.click(selector)` triggers React/Radix tab switches. If yes, simpli
 - Modify: `package.json` (add `camoufox-js`, `playwright-core`)
 
 **Tasks:**
-- [ ] Add `camoufox-js` and `playwright-core` as dependencies
-- [ ] Create `camoufoxLifecycle.ts` with:
+- [x] Add `camoufox-js` and `playwright-core` as dependencies
+- [x] Create `camoufoxLifecycle.ts` with:
   - `launchCamoufox(options)` — binary check/download, launch headless, set viewport
   - `registerCamoufoxTerminationHooks(browser, log)` — SIGINT/SIGTERM cleanup
-- [ ] Validate binary bootstrap with progress logging
+  - `cdpCookiesToPlaywright()` — normalize CDP-shaped cookies to Playwright format
+- [x] Validate binary bootstrap with progress logging
 
 ### Phase 2: Port action files (CDP → Playwright)
 
 All action files currently accept a `Runtime` (CDP) parameter. Change to accept a `Page` (Playwright) parameter.
 
 **Files (7 action files):**
-- [ ] `actions/navigation.ts` — 3 evaluate calls, `Page.navigate`. **Update error messages**: Cloudflare and login failure messages reference `--browser-chrome-profile` and headed Chrome — rewrite to reference `--browser-inline-cookies-file` and cookie re-export
-- [ ] `actions/modelSelection.ts` — 2 evaluate calls
-- [ ] `actions/promptSubmit.ts` — 8+ evaluate calls. **Note**: the 3-tier text input fallback chain (`beforeinput` → `execCommand` → `Input.insertText`) needs attention — `Input.insertText` is CDP-only. Replace with `page.keyboard.type(text)` or remove fallback if `beforeinput` works reliably in Playwright/Firefox
-- [ ] `actions/responseCapture.ts` — 6 evaluate calls
-- [ ] `actions/sourceFilter.ts` — 5 evaluate calls
-- [ ] `actions/deepResearch.ts` — 4 evaluate calls
-- [ ] `actions/spaceNavigation.ts` — 2 evaluate calls, `Page.navigate`
+- [x] `actions/navigation.ts` — 3 evaluate calls, `Page.navigate`. **Update error messages**: Cloudflare and login failure messages reference `--browser-chrome-profile` and headed Chrome — rewrite to reference `--browser-inline-cookies-file` and cookie re-export
+- [x] `actions/modelSelection.ts` — 2 evaluate calls
+- [x] `actions/promptSubmit.ts` — 8+ evaluate calls. **Note**: the 3-tier text input fallback chain (`beforeinput` → `execCommand` → `Input.insertText`) needs attention — `Input.insertText` is CDP-only. Replaced with `page.keyboard.type(text)` as third fallback
+- [x] `actions/responseCapture.ts` — 6 evaluate calls
+- [x] `actions/sourceFilter.ts` — 5 evaluate calls
+- [x] `actions/deepResearch.ts` — 4 evaluate calls
+- [x] `actions/spaceNavigation.ts` — 2 evaluate calls, `Page.navigate`
 
 **Conversion pattern:**
 ```typescript
@@ -178,31 +179,31 @@ export async function navigateToPerplexity(
 
 **File:** `src/perplexity-browser/index.ts`
 
-- [ ] Replace `launchChrome()` with `launchCamoufox()`
-- [ ] Replace CDP connection with Playwright browser/page
-- [ ] Replace cookie injection: `Network.setCookie` loop → `context.addCookies()`
-- [ ] Replace cookie write-back: `Network.getAllCookies()` → `context.cookies()`
-- [ ] Remove window-hiding code (lines 128-141)
-- [ ] Remove temp `userDataDir` creation/cleanup
-- [ ] Remove `Network.enable()`, `Page.enable()`, `Runtime.enable()` calls
-- [ ] Update disconnect detection
-- [ ] Wire all ported action functions with `page` instead of CDP domains
-- [ ] Update `BrowserRunResult` return: `chromePid` ← `browser.process()?.pid`, `chromePort`/`chromeHost`/`chromeTargetId`/`userDataDir` ← null
+- [x] Replace `launchChrome()` with `launchCamoufox()`
+- [x] Replace CDP connection with Playwright browser/page
+- [x] Replace cookie injection: `Network.setCookie` loop → `context.addCookies()`
+- [x] Replace cookie write-back: `Network.getAllCookies()` → `context.cookies()`
+- [x] Remove window-hiding code (lines 128-141)
+- [x] Remove temp `userDataDir` creation/cleanup
+- [x] Remove `Network.enable()`, `Page.enable()`, `Runtime.enable()` calls
+- [x] Update disconnect detection
+- [x] Wire all ported action functions with `page` instead of CDP domains
+- [x] Update `BrowserRunResult` return: Chrome-specific fields omitted (browser.process() not available on Camoufox)
 
 ### Phase 4: CLI flag handling
 
 **File:** `bin/oracle-cli.ts`, `src/cli/browserConfig.ts`
 
-- [ ] When engine is Perplexity: warn and ignore Chrome-specific flags
-- [ ] `--browser-inline-cookies-file` — add validation: warn if not provided for Perplexity browser mode
-- [ ] Verify `isBrowserCompatible()` in BOTH locations (`runOptions.ts:60` AND `oracle-cli.ts:992`)
+- [x] When engine is Perplexity: warn and ignore Chrome-specific flags (in executor)
+- [x] `--browser-inline-cookies-file` — add validation: warn if not provided for Perplexity browser mode
+- [x] Verify `isBrowserCompatible()` in BOTH locations (`runOptions.ts:60` AND `oracle-cli.ts:1006`) — already includes `sonar`
 
 ### Phase 5: Cleanup, documentation, and smoke tests
 
-- [ ] Update `.claude/CLAUDE.md` — remove headed Chrome workaround docs, add Camoufox notes
-- [ ] Remove dead imports from `chromeLifecycle.ts` in Perplexity engine
-- [ ] Verify `src/browser/types.ts` `ChromeClient` type is only used by ChatGPT engine now
-- [ ] Update `docs/browser-mode.md` if it documents Perplexity-specific behavior
+- [x] Update `.claude/CLAUDE.md` — remove headed Chrome workaround docs, add Camoufox notes
+- [x] Remove dead imports from `chromeLifecycle.ts` in Perplexity engine (all Chrome imports removed)
+- [x] Verify `src/browser/types.ts` `ChromeClient` type is only used by ChatGPT engine now (confirmed: 15 files in `src/browser/`, zero in `src/perplexity-browser/`)
+- [x] Update `docs/browser-mode.md` if it documents Perplexity-specific behavior (no Perplexity refs found — no update needed)
 - [ ] Document cookie seed workflow: how users get initial cookies into `~/.oracle/perplexity-cookies.json` without Chrome profile sync (export script or manual browser login + cookie dump)
 
 **Smoke test checklist** (browser-only, testable on current macOS setup):

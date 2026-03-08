@@ -1,4 +1,5 @@
-import type { ChromeClient, BrowserLogger } from '../../browser/types.js';
+import type { Page } from 'playwright-core';
+import type { BrowserLogger } from '../../browser/types.js';
 import { BrowserAutomationError } from '../../oracle/errors.js';
 import {
   RESPONSE_PROSE_SELECTOR,
@@ -6,8 +7,6 @@ import {
   SOURCES_TAB_TEXTS,
   TAB_SELECTOR,
 } from '../constants.js';
-
-type Runtime = ChromeClient['Runtime'];
 
 export interface CapturedResponse {
   text: string;
@@ -28,17 +27,17 @@ export interface Citation {
  * which are just popover triggers with domain+count text).
  */
 export async function capturePerplexityResponse(
-  runtime: Runtime,
+  page: Page,
   timeoutMs: number,
   log?: BrowserLogger,
 ): Promise<CapturedResponse> {
   log?.('[perplexity-browser] Waiting for response...');
 
   // 1. Wait for completion signal (copy button appearing)
-  await waitForCompletion(runtime, timeoutMs, log);
+  await waitForCompletion(page, timeoutMs, log);
 
   // 2. Extract response text from the prose container
-  const text = await extractResponseText(runtime);
+  const text = await extractResponseText(page);
   if (!text) {
     throw new BrowserAutomationError(
       'Response completed but no text found in the response container.',
@@ -47,7 +46,7 @@ export async function capturePerplexityResponse(
   }
 
   // 3. Extract source URLs from the Links tab
-  const citations = await extractSourcesFromLinksTab(runtime, log);
+  const citations = await extractSourcesFromLinksTab(page, log);
   log?.(
     `[perplexity-browser] Captured response: ${text.length} chars, ${citations.length} source(s)`,
   );
@@ -71,43 +70,36 @@ export function formatWithCitations(text: string, citations: Citation[]): string
   return `${text}\n\n${footnotes}`;
 }
 
-async function waitForCompletion(runtime: Runtime, timeoutMs: number, log?: BrowserLogger): Promise<void> {
-  const copySelectors = JSON.stringify(COPY_BUTTON_SELECTORS);
+async function waitForCompletion(page: Page, timeoutMs: number, log?: BrowserLogger): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   const pollIntervalMs = 2_000;
   let lastLogAt = 0;
 
   while (Date.now() < deadline) {
-    const result = await runtime.evaluate({
-      expression: `(() => {
-        const copySelectors = ${copySelectors};
-        for (const sel of copySelectors) {
-          if (document.querySelector(sel)) return { done: true, signal: 'copy-button' };
-        }
-        const followUps = document.querySelectorAll('[role="tabpanel"] button');
-        let suggestionCount = 0;
-        for (const btn of followUps) {
-          const text = btn.textContent?.trim() ?? '';
-          if (text.length > 15 && text.length < 200) suggestionCount++;
-        }
-        if (suggestionCount >= 3) return { done: true, signal: 'follow-up-suggestions' };
-        return { done: false };
-      })()`,
-      returnByValue: true,
-    });
+    const result = await page.evaluate((copySelectors: string[]) => {
+      for (const sel of copySelectors) {
+        if (document.querySelector(sel)) return { done: true, signal: 'copy-button' };
+      }
+      const followUps = document.querySelectorAll('[role="tabpanel"] button');
+      let suggestionCount = 0;
+      for (const btn of followUps) {
+        const text = btn.textContent?.trim() ?? '';
+        if (text.length > 15 && text.length < 200) suggestionCount++;
+      }
+      if (suggestionCount >= 3) return { done: true, signal: 'follow-up-suggestions' };
+      return { done: false };
+    }, COPY_BUTTON_SELECTORS);
 
-    if (result.result?.value?.done) {
-      log?.(`[perplexity-browser] Response complete (signal: ${result.result.value.signal})`);
+    if (result?.done) {
+      log?.(`[perplexity-browser] Response complete (signal: ${result.signal})`);
       // Wait for DOM rendering to finish — copy button can appear before
       // the last chunk of text is rendered. Poll until text stabilizes.
       let prevLen = 0;
       for (let i = 0; i < 5; i++) {
         await new Promise((r) => setTimeout(r, 800));
-        const lenCheck = await runtime.evaluate({
-          expression: `(document.querySelector('[role="tabpanel"] .prose')?.innerText?.length ?? 0)`,
-          returnByValue: true,
-        });
-        const curLen = (lenCheck.result?.value ?? 0) as number;
+        const curLen = await page.evaluate(
+          () => (document.querySelector('[role="tabpanel"] .prose') as HTMLElement)?.innerText?.length ?? 0,
+        );
         if (curLen > 0 && curLen === prevLen) break;
         prevLen = curLen;
       }
@@ -131,37 +123,31 @@ async function waitForCompletion(runtime: Runtime, timeoutMs: number, log?: Brow
   );
 }
 
-async function extractResponseText(runtime: Runtime): Promise<string> {
-  const proseSelector = JSON.stringify(RESPONSE_PROSE_SELECTOR);
-  const result = await runtime.evaluate({
-    expression: `(() => {
-      const container = document.querySelector(${proseSelector});
-      if (!container) return '';
-      const paragraphs = container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, pre, blockquote');
-      if (paragraphs.length === 0) return container.innerText?.trim() ?? '';
-      const parts = [];
-      for (const el of paragraphs) {
-        const tag = el.tagName.toLowerCase();
-        let text = el.innerText?.trim() ?? '';
-        if (!text) continue;
-        if (tag.startsWith('h')) {
-          const level = parseInt(tag[1], 10);
-          text = '#'.repeat(level) + ' ' + text;
-        } else if (tag === 'li') {
-          text = '- ' + text;
-        } else if (tag === 'pre') {
-          text = '\\n' + text + '\\n';
-        } else if (tag === 'blockquote') {
-          text = '> ' + text;
-        }
-        parts.push(text);
+async function extractResponseText(page: Page): Promise<string> {
+  return await page.evaluate((proseSelector: string) => {
+    const container = document.querySelector(proseSelector) as HTMLElement | null;
+    if (!container) return '';
+    const paragraphs = container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, pre, blockquote');
+    if (paragraphs.length === 0) return container.innerText?.trim() ?? '';
+    const parts: string[] = [];
+    for (const el of paragraphs) {
+      const tag = el.tagName.toLowerCase();
+      let text = (el as HTMLElement).innerText?.trim() ?? '';
+      if (!text) continue;
+      if (tag.startsWith('h')) {
+        const level = parseInt(tag[1], 10);
+        text = '#'.repeat(level) + ' ' + text;
+      } else if (tag === 'li') {
+        text = '- ' + text;
+      } else if (tag === 'pre') {
+        text = '\n' + text + '\n';
+      } else if (tag === 'blockquote') {
+        text = '> ' + text;
       }
-      return parts.join('\\n\\n');
-    })()`,
-    returnByValue: true,
-  });
-
-  return (result.result?.value ?? '') as string;
+      parts.push(text);
+    }
+    return parts.join('\n\n');
+  }, RESPONSE_PROSE_SELECTOR);
 }
 
 /**
@@ -171,25 +157,19 @@ async function extractResponseText(runtime: Runtime): Promise<string> {
  * popover triggers). Real URLs are only available in the "リンク" (Links) tab.
  * We programmatically activate the tab, extract a[href] links, then switch back.
  *
- * Important: avoid async IIFE with awaitPromise:true here — Perplexity SPA
- * navigation on tab click destroys the JS execution context mid-evaluation,
- * causing "Promise was collected". Use Node-side sleeps between sync evals.
+ * Uses page.click() for tab switching with fallback to pointer event sequences.
  */
-async function extractSourcesFromLinksTab(runtime: Runtime, log?: BrowserLogger): Promise<Citation[]> {
-  const tabTexts = JSON.stringify(SOURCES_TAB_TEXTS);
-  const tabSelector = JSON.stringify(TAB_SELECTOR);
-
-  // Step 1: find tabs and click the Links tab (synchronous, no await inside)
-  const clickResult = await runtime.evaluate({
-    expression: `(() => {
-      const tabTexts = ${tabTexts};
-      const tabs = document.querySelectorAll(${tabSelector});
-      let linksTab = null;
-      let answerTabId = null;
+async function extractSourcesFromLinksTab(page: Page, log?: BrowserLogger): Promise<Citation[]> {
+  // Step 1: find and click the Links tab
+  const clickResult = await page.evaluate(
+    (args: { tabTexts: string[]; tabSelector: string }) => {
+      const tabs = document.querySelectorAll(args.tabSelector);
+      let linksTab: Element | null = null;
+      let answerTabId: string | null = null;
 
       for (const tab of tabs) {
         const text = tab.textContent?.trim() ?? '';
-        if (tabTexts.some(t => text.includes(t))) {
+        if (args.tabTexts.some(t => text.includes(t))) {
           linksTab = tab;
         }
         const isActive = tab.getAttribute('data-state') === 'active' || tab.getAttribute('aria-selected') === 'true';
@@ -200,8 +180,7 @@ async function extractSourcesFromLinksTab(runtime: Runtime, log?: BrowserLogger)
 
       if (!linksTab) return { found: false };
 
-      // Activate the Links tab using full pointer event sequence
-      // (plain .click() doesn't trigger React/Radix tab switching)
+      // Try click() first; fall back to full pointer event sequence for Radix tabs
       const rect = linksTab.getBoundingClientRect();
       const x = rect.left + rect.width / 2;
       const y = rect.top + rect.height / 2;
@@ -210,56 +189,48 @@ async function extractSourcesFromLinksTab(runtime: Runtime, log?: BrowserLogger)
       linksTab.dispatchEvent(new MouseEvent('mousedown', evtOpts));
       linksTab.dispatchEvent(new PointerEvent('pointerup', evtOpts));
       linksTab.dispatchEvent(new MouseEvent('mouseup', evtOpts));
-      linksTab.click();
+      (linksTab as HTMLElement).click();
 
       return { found: true, answerTabId };
-    })()`,
-    returnByValue: true,
-  });
+    },
+    { tabTexts: SOURCES_TAB_TEXTS, tabSelector: TAB_SELECTOR },
+  );
 
-  const clickVal = clickResult.result?.value as { found: boolean; answerTabId?: string | null } | undefined;
-  if (!clickVal?.found) {
+  if (!clickResult?.found) {
     log?.('[perplexity-browser] Could not extract sources: links-tab-not-found');
     return [];
   }
 
-  // Step 2: Node-side sleep to let Radix tab panel render (avoids async IIFE)
+  // Step 2: Wait for Radix tab panel to render
   await new Promise((r) => setTimeout(r, 800));
 
-  // Step 3: extract links (synchronous)
-  const linksResult = await runtime.evaluate({
-    expression: `(() => {
-      const links = document.querySelectorAll('a[href^="http"]');
-      const sources = [];
-      let index = 1;
-      const seen = new Set();
-      for (const link of links) {
-        const href = link.href;
-        if (!href || href.includes('perplexity.ai') || seen.has(href)) continue;
-        seen.add(href);
-        const label = link.textContent?.trim() || '';
-        try {
-          const hostname = new URL(href).hostname;
-          sources.push({ index, label: label || hostname, url: href });
-          index++;
-        } catch {}
-      }
-      return sources;
-    })()`,
-    returnByValue: true,
+  // Step 3: Extract links
+  const sources = await page.evaluate(() => {
+    const links = document.querySelectorAll('a[href^="http"]');
+    const result: Array<{ index: number; label: string; url: string }> = [];
+    let index = 1;
+    const seen = new Set<string>();
+    for (const link of links) {
+      const href = (link as HTMLAnchorElement).href;
+      if (!href || href.includes('perplexity.ai') || seen.has(href)) continue;
+      seen.add(href);
+      const label = link.textContent?.trim() || '';
+      try {
+        const hostname = new URL(href).hostname;
+        result.push({ index, label: label || hostname, url: href });
+        index++;
+      } catch { /* skip invalid URLs */ }
+    }
+    return result;
   });
 
-  const sources = (linksResult.result?.value ?? []) as Citation[];
-
-  // Step 4: switch back to Answer tab (synchronous, best-effort)
-  if (clickVal.answerTabId) {
-    const answerTabText = JSON.stringify(clickVal.answerTabId);
-    await runtime.evaluate({
-      expression: `(() => {
-        const tabSelector = ${tabSelector};
-        const tabs = document.querySelectorAll(tabSelector);
+  // Step 4: Switch back to Answer tab (best-effort)
+  if (clickResult.answerTabId) {
+    await page.evaluate(
+      (args: { answerTabText: string; tabSelector: string }) => {
+        const tabs = document.querySelectorAll(args.tabSelector);
         for (const tab of tabs) {
-          if (tab.textContent?.trim() === ${answerTabText}) {
+          if (tab.textContent?.trim() === args.answerTabText) {
             const rect = tab.getBoundingClientRect();
             const x = rect.left + rect.width / 2;
             const y = rect.top + rect.height / 2;
@@ -268,14 +239,14 @@ async function extractSourcesFromLinksTab(runtime: Runtime, log?: BrowserLogger)
             tab.dispatchEvent(new MouseEvent('mousedown', opts));
             tab.dispatchEvent(new PointerEvent('pointerup', opts));
             tab.dispatchEvent(new MouseEvent('mouseup', opts));
-            tab.click();
+            (tab as HTMLElement).click();
             break;
           }
         }
-      })()`,
-      returnByValue: false,
-    }).catch(() => undefined); // best-effort
+      },
+      { answerTabText: clickResult.answerTabId, tabSelector: TAB_SELECTOR },
+    ).catch(() => undefined);
   }
 
-  return sources;
+  return sources as Citation[];
 }

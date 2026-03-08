@@ -1,11 +1,10 @@
-import type { ChromeClient, BrowserLogger } from '../../browser/types.js';
+import type { Page } from 'playwright-core';
+import type { BrowserLogger } from '../../browser/types.js';
 import {
   ADD_TOOLS_BUTTON_LABELS,
   CONNECTORS_MENUITEM_TEXTS,
   SOURCE_ICON_IDS,
 } from '../constants.js';
-
-type Runtime = ChromeClient['Runtime'];
 
 /**
  * Enable the Social source filter in Perplexity's search.
@@ -16,31 +15,23 @@ type Runtime = ChromeClient['Runtime'];
  * The Social source is always enabled by default for richer search results.
  */
 export async function enableSocialSource(
-  runtime: Runtime,
+  page: Page,
   log?: BrowserLogger,
 ): Promise<void> {
-  const toolsLabels = JSON.stringify(ADD_TOOLS_BUTTON_LABELS);
-  const connectorsTexts = JSON.stringify(CONNECTORS_MENUITEM_TEXTS);
-  const socialIconId = JSON.stringify(SOURCE_ICON_IDS.social);
-
   // Step 1: Open the "Add files or tools" menu
-  const openResult = await runtime.evaluate({
-    expression: `(() => {
-      const labels = ${toolsLabels};
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        const label = btn.getAttribute('aria-label') ?? '';
-        if (labels.some(l => label.includes(l))) {
-          btn.click();
-          return { found: true, label };
-        }
+  const openResult = await page.evaluate((labels: string[]) => {
+    const buttons = document.querySelectorAll('button');
+    for (const btn of buttons) {
+      const label = btn.getAttribute('aria-label') ?? '';
+      if (labels.some(l => label.includes(l))) {
+        btn.click();
+        return { found: true, label };
       }
-      return { found: false };
-    })()`,
-    returnByValue: true,
-  });
+    }
+    return { found: false };
+  }, ADD_TOOLS_BUTTON_LABELS);
 
-  if (!openResult.result?.value?.found) {
+  if (!openResult?.found) {
     log?.('[perplexity-browser] Could not find "Add tools" button — skipping social source toggle');
     return;
   }
@@ -49,26 +40,23 @@ export async function enableSocialSource(
   await new Promise((r) => setTimeout(r, 500));
 
   // Step 2: Click "Connectors & Sources" submenu
-  const subResult = await runtime.evaluate({
-    expression: `(() => {
-      const texts = ${connectorsTexts};
-      const items = document.querySelectorAll('[role="menuitem"]');
-      for (const item of items) {
-        const text = item.textContent?.trim() ?? '';
-        if (texts.some(t => text.includes(t))) {
-          item.click();
-          return { found: true, text };
-        }
+  const subResult = await page.evaluate((texts: string[]) => {
+    const items = document.querySelectorAll('[role="menuitem"]');
+    for (const item of items) {
+      const text = item.textContent?.trim() ?? '';
+      if (texts.some(t => text.includes(t))) {
+        (item as HTMLElement).click();
+        return { found: true, text };
       }
-      return { found: false };
-    })()`,
-    returnByValue: true,
-  });
+    }
+    return { found: false };
+  }, CONNECTORS_MENUITEM_TEXTS);
 
-  if (!subResult.result?.value?.found) {
+  if (!subResult?.found) {
     log?.('[perplexity-browser] Could not find "Connectors & Sources" menuitem — skipping');
-    // Close menu by pressing Escape
-    await runtime.evaluate({ expression: `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))` });
+    await page.evaluate(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
     return;
   }
 
@@ -76,50 +64,40 @@ export async function enableSocialSource(
   await new Promise((r) => setTimeout(r, 500));
 
   // Step 3: Find Social checkbox by SVG icon and toggle if unchecked
-  const toggleResult = await runtime.evaluate({
-    expression: `(() => {
-      const iconId = ${socialIconId};
-      const uses = document.querySelectorAll('[role="menuitemcheckbox"] use');
-      for (const u of uses) {
-        const href = u.getAttribute('xlink:href') || u.getAttribute('href');
-        if (href === iconId) {
-          const checkbox = u.closest('[role="menuitemcheckbox"]');
-          if (!checkbox) return { found: false };
-          const checked = checkbox.getAttribute('aria-checked') === 'true';
-          if (checked) return { found: true, alreadyChecked: true };
-          checkbox.click();
-          return { found: true, alreadyChecked: false };
-        }
+  const toggleResult = await page.evaluate((socialIconId: string) => {
+    const uses = document.querySelectorAll('[role="menuitemcheckbox"] use');
+    for (const u of uses) {
+      const href = u.getAttribute('xlink:href') || u.getAttribute('href');
+      if (href === socialIconId) {
+        const checkbox = u.closest('[role="menuitemcheckbox"]');
+        if (!checkbox) return { found: false };
+        const checked = checkbox.getAttribute('aria-checked') === 'true';
+        if (checked) return { found: true, alreadyChecked: true };
+        (checkbox as HTMLElement).click();
+        return { found: true, alreadyChecked: false };
       }
-      return { found: false };
-    })()`,
-    returnByValue: true,
-  });
+    }
+    return { found: false };
+  }, SOURCE_ICON_IDS.social);
 
-  const val = toggleResult.result?.value as { found: boolean; alreadyChecked?: boolean } | undefined;
-  if (!val?.found) {
+  if (!toggleResult?.found) {
     log?.('[perplexity-browser] Could not find Social source checkbox — skipping');
-  } else if (val.alreadyChecked) {
+  } else if (toggleResult.alreadyChecked) {
     log?.('[perplexity-browser] Social source already enabled');
   } else {
     log?.('[perplexity-browser] Enabled Social source filter');
   }
 
-  // Step 4: Close menu by clicking the page body outside the menu overlay.
-  // Radix UI menus don't reliably close from synthetic Escape on `document`.
+  // Step 4: Close menu by clicking the page body
   await new Promise((r) => setTimeout(r, 300));
-  await runtime.evaluate({
-    expression: `(() => {
-      // Click on main content area to dismiss any open menu/overlay
-      const main = document.querySelector('main') || document.body;
-      main.click();
-      // Also dispatch pointer events in case .click() alone doesn't dismiss Radix overlays
-      const evt = { bubbles: true, cancelable: true, clientX: 10, clientY: 10 };
-      main.dispatchEvent(new PointerEvent('pointerdown', evt));
-      main.dispatchEvent(new MouseEvent('mousedown', evt));
-      main.dispatchEvent(new PointerEvent('pointerup', evt));
-      main.dispatchEvent(new MouseEvent('mouseup', evt));
-    })()`,
+  await page.evaluate(() => {
+    const main = document.querySelector('main') || document.body;
+    (main as HTMLElement).click();
+    const evt = { bubbles: true, cancelable: true, clientX: 10, clientY: 10 };
+    main.dispatchEvent(new PointerEvent('pointerdown', evt));
+    main.dispatchEvent(new MouseEvent('mousedown', evt));
+    main.dispatchEvent(new PointerEvent('pointerup', evt));
+    main.dispatchEvent(new MouseEvent('mouseup', evt));
   });
   await new Promise((r) => setTimeout(r, 300));
 }

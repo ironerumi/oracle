@@ -1,10 +1,8 @@
-import type { ChromeClient, BrowserLogger } from '../../browser/types.js';
+import type { Page } from 'playwright-core';
+import type { BrowserLogger } from '../../browser/types.js';
 import { BrowserAutomationError } from '../../oracle/errors.js';
 import { buildSpaceUrl } from '../constants.js';
 import { waitForDocumentReady } from './navigation.js';
-
-type Runtime = ChromeClient['Runtime'];
-type Page = ChromeClient['Page'];
 
 /**
  * Resolve a --space argument to a full Perplexity Space URL.
@@ -50,7 +48,6 @@ function extractSlug(space: string): string {
   if (trimmed.startsWith('http')) {
     try {
       const pathname = new URL(trimmed).pathname;
-      // /spaces/slug -> slug
       const match = pathname.match(/\/spaces\/(.+)/);
       return match?.[1] ?? trimmed;
     } catch {
@@ -70,22 +67,17 @@ const NEW_THREAD_TEXTS = ['New Thread', '新しいスレッド', 'Nouveau fil', 
  */
 export async function navigateToSpace(
   page: Page,
-  runtime: Runtime,
   space: string,
   log?: BrowserLogger,
 ): Promise<void> {
   const url = resolveSpaceUrl(space);
   log?.(`[perplexity-browser] Navigating to Space: ${url}`);
 
-  await page.navigate({ url });
-  await waitForDocumentReady(runtime, 30_000);
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await waitForDocumentReady(page, 30_000);
 
   // Verify we landed on the space (not redirected to home or 404)
-  const result = await runtime.evaluate({
-    expression: 'location.href',
-    returnByValue: true,
-  });
-  const currentUrl = (result.result?.value ?? '') as string;
+  const currentUrl = await page.evaluate(() => location.href);
   const slug = extractSlug(space);
 
   if (!currentUrl.includes(slug)) {
@@ -97,44 +89,31 @@ export async function navigateToSpace(
 
   log?.(`[perplexity-browser] Landed on Space: ${currentUrl}`);
 
-  // Wait for React hydration — Space pages often show a thread list before the editor.
+  // Wait for React hydration
   await new Promise((r) => setTimeout(r, 1_000));
 
   // Check if prompt editor is already present; if not, try "New Thread" button.
-  const newThreadTexts = JSON.stringify(NEW_THREAD_TEXTS);
-  const clickResult = await runtime.evaluate({
-    expression: `(() => {
-      // Check if editor already exists
-      const editor = document.querySelector('[data-lexical-editor][contenteditable="true"]')
-        ?? document.querySelector('[role="textbox"][contenteditable="true"]');
-      if (editor) return { hadEditor: true };
+  const clickVal = await page.evaluate((newThreadTexts: string[]) => {
+    const editor = document.querySelector('[data-lexical-editor][contenteditable="true"]')
+      ?? document.querySelector('[role="textbox"][contenteditable="true"]');
+    if (editor) return { hadEditor: true };
 
-      // Look for New Thread button (text or aria-label match)
-      const texts = ${newThreadTexts};
-      const allBtns = document.querySelectorAll('button, a[role="button"]');
-      for (const btn of allBtns) {
-        const text = btn.textContent?.trim() ?? '';
-        const label = btn.getAttribute('aria-label') ?? '';
-        if (texts.some(t => text.includes(t) || label.includes(t))) {
-          btn.click();
-          return { hadEditor: false, clicked: text || label };
-        }
+    const allBtns = document.querySelectorAll('button, a[role="button"]');
+    for (const btn of allBtns) {
+      const text = btn.textContent?.trim() ?? '';
+      const label = btn.getAttribute('aria-label') ?? '';
+      if (newThreadTexts.some(t => text.includes(t) || label.includes(t))) {
+        (btn as HTMLElement).click();
+        return { hadEditor: false, clicked: text || label };
       }
-      return { hadEditor: false, clicked: null };
-    })()`,
-    returnByValue: true,
-  });
-
-  const clickVal = clickResult.result?.value as {
-    hadEditor: boolean;
-    clicked?: string | null;
-  } | undefined;
+    }
+    return { hadEditor: false, clicked: null };
+  }, NEW_THREAD_TEXTS);
 
   if (clickVal?.hadEditor) {
     log?.('[perplexity-browser] Prompt editor already present in Space');
   } else if (clickVal?.clicked) {
     log?.(`[perplexity-browser] Clicked "New Thread" button: "${clickVal.clicked}"`);
-    // Wait for the editor to appear after click
     await new Promise((r) => setTimeout(r, 1_000));
   } else {
     log?.('[perplexity-browser] No "New Thread" button found; proceeding (editor may appear)');

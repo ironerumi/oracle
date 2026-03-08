@@ -1,12 +1,11 @@
-import type { ChromeClient, BrowserLogger } from '../../browser/types.js';
+import type { Page } from 'playwright-core';
+import type { BrowserLogger } from '../../browser/types.js';
 import { BrowserAutomationError } from '../../oracle/errors.js';
 import {
   MODEL_PICKER_SELECTORS,
   MODEL_PICKER_BUTTON_TEXTS,
   PERPLEXITY_MODEL_LABELS,
 } from '../constants.js';
-
-type Runtime = ChromeClient['Runtime'];
 
 /**
  * Select a Perplexity model via the web UI picker.
@@ -20,7 +19,7 @@ type Runtime = ChromeClient['Runtime'];
  * The model picker button shows the CURRENT model name as its label.
  */
 export async function selectPerplexityModel(
-  runtime: Runtime,
+  page: Page,
   desiredModel: string | null | undefined,
   log?: BrowserLogger,
 ): Promise<void> {
@@ -29,7 +28,6 @@ export async function selectPerplexityModel(
   const knownLabels = PERPLEXITY_MODEL_LABELS[model];
 
   // Known model → use locale-aware labels; unknown → use raw string as picker label passthrough.
-  // This lets --browser-model-label "Claude Sonnet 4.6" work without a static map entry.
   const labels = knownLabels ?? (raw ? [raw] : null);
 
   if (!labels) {
@@ -38,29 +36,18 @@ export async function selectPerplexityModel(
   }
 
   // Check if the current model already matches by reading the picker button text
-  const pickerBtnTexts = JSON.stringify(MODEL_PICKER_BUTTON_TEXTS);
-  const targetLabels = JSON.stringify(labels);
-  const pickerSelectors = JSON.stringify(MODEL_PICKER_SELECTORS);
-
-  const checkResult = await runtime.evaluate({
-    expression: `(() => {
-      const pickerSelectors = ${pickerSelectors};
-      const pickerBtnTexts = ${pickerBtnTexts};
-      const targetLabels = ${targetLabels};
-
-      // Find the model picker button.
-      // It may have aria-label="Select model" OR show the current model name.
-      let pickerBtn = null;
-      for (const sel of pickerSelectors) {
+  const check = await page.evaluate(
+    (args: { pickerSelectors: string[]; pickerBtnTexts: string[]; targetLabels: string[] }) => {
+      let pickerBtn: Element | null = null;
+      for (const sel of args.pickerSelectors) {
         pickerBtn = document.querySelector(sel);
         if (pickerBtn) break;
       }
       if (!pickerBtn) {
-        // Fallback: find button whose text matches known picker labels
         const allBtns = document.querySelectorAll('button');
         for (const btn of allBtns) {
           const text = btn.textContent?.trim() ?? '';
-          if (pickerBtnTexts.some(t => text === t)) {
+          if (args.pickerBtnTexts.some(t => text === t)) {
             pickerBtn = btn;
             break;
           }
@@ -69,20 +56,13 @@ export async function selectPerplexityModel(
       if (!pickerBtn) return { found: false };
 
       const currentText = pickerBtn.textContent?.trim() ?? '';
-      const alreadySelected = targetLabels.some(t => currentText.includes(t));
+      const alreadySelected = args.targetLabels.some(t => currentText.includes(t));
       return { found: true, currentText, alreadySelected };
-    })()`,
-    returnByValue: true,
-  });
-
-  const check = checkResult.result?.value as {
-    found: boolean;
-    currentText?: string;
-    alreadySelected?: boolean;
-  } | undefined;
+    },
+    { pickerSelectors: MODEL_PICKER_SELECTORS, pickerBtnTexts: MODEL_PICKER_BUTTON_TEXTS, targetLabels: labels },
+  );
 
   if (!check?.found) {
-    // Model picker not found — not fatal for sonar (it's the default)
     if (model.startsWith('sonar')) {
       log?.('[perplexity-browser] Model picker button not found, but sonar is the default. Continuing.');
       return;
@@ -98,18 +78,13 @@ export async function selectPerplexityModel(
     return;
   }
 
-  // Need to open picker and select. For sonar models this shouldn't happen
-  // (Sonar is the default), but handle it gracefully.
+  // Need to open picker and select
   log?.(`[perplexity-browser] Current model is "${check.currentText}", need to switch to ${model}`);
 
-  const selectResult = await runtime.evaluate({
-    expression: `(async () => {
-      const pickerSelectors = ${pickerSelectors};
-      const pickerBtnTexts = ${pickerBtnTexts};
-      const targetLabels = ${targetLabels};
-
-      let pickerBtn = null;
-      for (const sel of pickerSelectors) {
+  const result = await page.evaluate(
+    async (args: { pickerSelectors: string[]; pickerBtnTexts: string[]; targetLabels: string[] }) => {
+      let pickerBtn: Element | null = null;
+      for (const sel of args.pickerSelectors) {
         pickerBtn = document.querySelector(sel);
         if (pickerBtn) break;
       }
@@ -117,20 +92,19 @@ export async function selectPerplexityModel(
         const allBtns = document.querySelectorAll('button');
         for (const btn of allBtns) {
           const text = btn.textContent?.trim() ?? '';
-          if (pickerBtnTexts.some(t => text === t)) { pickerBtn = btn; break; }
+          if (args.pickerBtnTexts.some(t => text === t)) { pickerBtn = btn; break; }
         }
       }
       if (!pickerBtn) return { status: 'picker-not-found' };
 
-      pickerBtn.click();
+      (pickerBtn as HTMLElement).click();
       await new Promise(r => setTimeout(r, 600));
 
-      // Scan all visible items for a match
       const candidates = document.querySelectorAll('[role="menuitem"], [role="option"], [role="menuitemradio"], [role="listbox"] button, [data-radix-collection-root] button');
-      let matched = null;
+      let matched: Element | null = null;
       for (const item of candidates) {
         const text = item.textContent?.trim() ?? '';
-        if (targetLabels.some(t => text.includes(t))) {
+        if (args.targetLabels.some(t => text.includes(t))) {
           matched = item;
           break;
         }
@@ -141,31 +115,23 @@ export async function selectPerplexityModel(
         return { status: 'label-not-found', available };
       }
 
-      matched.click();
+      (matched as HTMLElement).click();
       await new Promise(r => setTimeout(r, 300));
       return { status: 'selected', text: matched.textContent?.trim() };
-    })()`,
-    returnByValue: true,
-    awaitPromise: true,
-  });
-
-  const result = selectResult.result?.value as {
-    status: string;
-    text?: string;
-    available?: string[];
-  } | undefined;
+    },
+    { pickerSelectors: MODEL_PICKER_SELECTORS, pickerBtnTexts: MODEL_PICKER_BUTTON_TEXTS, targetLabels: labels },
+  );
 
   if (result?.status === 'selected') {
     log?.(`[perplexity-browser] Model switched to: ${result.text}`);
   } else if (result?.status === 'label-not-found') {
     throw new BrowserAutomationError(
       `Could not find model matching ${JSON.stringify(labels)} in picker. ` +
-        `Available: ${(result.available ?? []).join(', ') || '(none)'}. ` +
+        `Available: ${((result as { available?: string[] }).available ?? []).join(', ') || '(none)'}. ` +
         'Update PERPLEXITY_MODEL_LABELS in constants.ts.',
       { stage: 'model-selection' },
     );
   } else {
-    // For sonar models, failing to switch is non-fatal (it's the default)
     if (model.startsWith('sonar')) {
       log?.('[perplexity-browser] Could not switch model but sonar is default. Continuing.');
       return;
