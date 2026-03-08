@@ -268,36 +268,44 @@ export async function navigateToPerplexity(
 - Full history: .sessions/260308-1617_19354b55/main.md
 
 ### Open / Next
-- ~~**Smoke test basic query**~~: DONE — all passing
-- ~~**Smoke test Deep Research**~~: DONE — activation triggers after bug fix
-- ~~**Smoke test space**~~: DONE — passing
-- ~~**Smoke test Chrome flag warning**~~: DONE — warning emitted
-- **Source filter / Deep Research UI selectors**: "Connectors & Sources" menuitem and Deep Research toggle not found in current Perplexity UI. Selectors may need updating for latest UI. Queries still succeed without these features.
-- **Radix click validation**: Not tested — source filter menu not reachable. Deferred to selector fix.
 - **`ensureCamoufoxBinary` import path**: `camoufox-js/dist/pkgman.js` is an internal path — may break on version bumps. Monitor or find a public API
+- **PR creation**: Branch `feat/camoufox-headless-perplexity` has 5 commits ready. Push and create PR against `main`.
 
-## Session Log — 2026-03-09 (Smoke Tests)
+## Session Log — 2026-03-09 (Smoke Tests + Fixes)
 
-### Bug Fix
-| Bug | Root Cause | Fix |
-|-----|-----------|-----|
-| Deep Research never activated | `browserConfig.desiredModel` mapped to browser label `'Sonar'` — lost original model name `'sonar-deep-research'` | Added `cliModel` to `PerplexityBrowserOptions`, passed from CLI, used for DR activation check |
+### Decisions
+| Decision | Chosen | Rejected | Why |
+|----------|--------|----------|-----|
+| `desiredModel` for Perplexity | Store raw model name (`sonar-deep-research`) in `browserConfig.desiredModel` — skip `mapModelToBrowserLabel()` for sonar models | `cliModel` field on `PerplexityBrowserOptions` | Perplexity executor derives browser label internally via `PERPLEXITY_MODEL_LABELS`; no info lost. Also fixes latent timeout bug. `cliModel` was a design hack. |
+| Radix menu click strategy | Full pointer event sequence (pointerdown→mousedown→pointerup→mouseup→click with coords) | Plain `.click()` | Radix UI ignores plain `.click()` — menus don't open. Same pattern already documented for agent-browser CDP. |
+| DR completion signal | Gate `follow-up-suggestions` on prose container existence | Fallback selector chain for text extraction | The canonical `[role="tabpanel"] .prose` selector is correct for DR too — the bug was false-positive completion detection from DR progress UI buttons. Fix the signal, not the selector. |
 
 ### Files Modified
-- `src/perplexity-browser/index.ts` — added `cliModel` option to `PerplexityBrowserOptions`; use `cliModel` for Deep Research activation check
-- `bin/oracle-cli.ts` — pass `resolvedModel` as `cliModel` to Perplexity executor
+- `src/cli/browserConfig.ts` — skip `mapModelToBrowserLabel()` for Perplexity models; `desiredModel` carries raw model name
+- `src/perplexity-browser/index.ts` — reverted `cliModel` hack; use `desiredModel` directly for DR activation
+- `bin/oracle-cli.ts` — removed `cliModel` passthrough
+- `src/perplexity-browser/actions/sourceFilter.ts` — pointer events for all Radix clicks; text-based fallback selectors; broader `Connectors & Sources` text matching
+- `src/perplexity-browser/actions/deepResearch.ts` — pointer events for all Radix clicks; text-based fallback selectors
+- `src/perplexity-browser/actions/responseCapture.ts` — gate `follow-up-suggestions` on prose existence to prevent false DR completion
+- `src/perplexity-browser/constants.ts` — added `SOCIAL_SOURCE_TEXTS`; broadened `ADD_TOOLS_BUTTON_LABELS` and `CONNECTORS_MENUITEM_TEXTS`
+- `.claude/CLAUDE.md` — updated Radix pointer events docs, `desiredModel` convention; version_id 260309.1
 
-### Smoke Test Results (2026-03-09)
+### Smoke Test Results (2026-03-09, final)
 | Test | Status | Time | Notes |
 |------|--------|------|-------|
-| Basic query (`sonar "what is 2+2"`) | PASS | 9.3s | Headless, CF bypass, 14 cookies injected, write-back |
-| Deep Research (`sonar-deep-research`) | PASS* | 20.6s | *Activation triggers, toggle not found (UI change). 25 sources, 1619 chars |
-| Space nav (`sonar --space dev-...`) | PASS | 10.5s | Space URL navigated, prompt editor found, 10 sources |
-| Missing cookies | PASS | 9.4s | Warning: "Provide --browser-inline-cookies-file". No dead Chrome advice |
-| Chrome flag warning | PASS | — | `--browser-chrome-profile` warning emitted, flag ignored |
+| Basic query (`sonar "what is 2+2"`) | PASS | 9.3s | Headless, CF bypass, 14 cookies, write-back |
+| Deep Research (JP, long) | PASS | 133s | 3648+ chars, 15 sources, copy-button signal |
+| Space nav (`--space dev-...`) | PASS | 10.5s | Space URL navigated, 10 sources |
+| Missing cookies | PASS | 9.4s | Warning: "Provide --browser-inline-cookies-file" |
+| Chrome flag warning | PASS | — | Warning emitted, flag ignored |
+| Source filter | PASS | — | "Enabled Social source filter" in logs |
+| Deep Research activation | PASS | — | "Activated Deep Research mode" in logs |
+
+### Session Export
+- Full history: .sessions/260308-1650_ab97bfe9/main.md
 
 ### Observations
 - Perplexity allows unauthenticated basic queries (no cookies = still works)
 - Cookie write-back creates file even if it didn't exist (auto-bootstrap)
-- `better-sqlite3` native module needed rebuild after Node version change (`npx node-gyp rebuild`)
-- "Connectors & Sources" and Deep Research toggle selectors need update for current Perplexity UI
+- `better-sqlite3` native module needed rebuild after Node version change (`npx node-gyp rebuild` in the pnpm module dir)
+- DR progress UI has buttons matching follow-up-suggestions heuristic — must gate on prose existence
