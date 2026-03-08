@@ -92,8 +92,8 @@ return await page.evaluate((selectors) => { /* jsCode using selectors */ }, sele
 - [x] Cookie injection from `~/.oracle/perplexity-cookies.json` works
 - [x] Cookie write-back after successful run works
 - [x] Model selection (all Sonar variants) works (sonar default — picker not found but sonar is default; sonar-deep-research triggers DR activation)
-- [ ] Source filter toggling works — "Connectors & Sources" menuitem not found (pre-existing UI selector issue)
-- [x] Deep Research mode works — activation code triggers after cliModel passthrough fix; UI toggle not found (selector issue)
+- [x] Source filter toggling works — fixed: Radix pointer events required (plain .click() doesn't open menus)
+- [x] Deep Research mode works — fixed: desiredModel now carries raw model name; Radix pointer events for menu activation
 - [x] Space navigation works
 - [x] ChatGPT browser engine is completely unaffected (no changes to `src/browser/` or ChatGPT action files)
 - [x] Chrome-specific CLI flags warn and are ignored for Perplexity
