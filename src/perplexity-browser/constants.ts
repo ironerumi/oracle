@@ -96,8 +96,8 @@ export const MODEL_PICKER_BUTTON_TEXTS = ['Sonar', 'ソナー', 'Select model', 
 // Access path: "ファイルまたはツールを追加する" button → "コネクタとソース" menuitem → checkboxes
 // Source filters are [role="menuitemcheckbox"] with SVG icons for native sources.
 // Using SVG icon #href is the most locale-independent, stable selector.
-export const ADD_TOOLS_BUTTON_LABELS = ['ファイルまたはツールを追加する', 'Add files or tools', 'Attach'];
-export const CONNECTORS_MENUITEM_TEXTS = ['コネクタとソース', 'Connectors and sources', 'Sources'];
+export const ADD_TOOLS_BUTTON_LABELS = ['ファイルまたはツールを追加する', 'Add files or tools', 'Attach', 'Add tools', 'ツールを追加'];
+export const CONNECTORS_MENUITEM_TEXTS = ['コネクタとソース', 'Connectors and sources', 'Connectors & Sources', 'Sources'];
 
 // Native source icon IDs (inside <use xlink:href="..."> within menuitemcheckbox)
 export const SOURCE_ICON_IDS: Record<string, string> = {
@@ -105,6 +105,9 @@ export const SOURCE_ICON_IDS: Record<string, string> = {
   academic: '#pplx-icon-books',
   social: '#pplx-icon-social',
 };
+
+// Text-based fallback for source filter toggle (locale variants)
+export const SOCIAL_SOURCE_TEXTS = ['Social', 'ソーシャル', 'X (Twitter)'];
 
 // --- Deep Research toggle (same [+] menu, top-level menuitemradio) ---
 // Activation: click "Add files or tools" button → click menuitemradio with telescope icon.

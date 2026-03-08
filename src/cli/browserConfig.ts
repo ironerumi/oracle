@@ -123,11 +123,14 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
   const rawUrl = options.chatgptUrl ?? options.browserUrl;
   const url = rawUrl ? normalizeChatgptUrl(rawUrl, CHATGPT_URL) : undefined;
 
+  const isPerplexityModel = baseModel.startsWith('sonar');
   const desiredModel = isChatGptModel
     ? mapModelToBrowserLabel(options.model)
-    : shouldUseOverride
-      ? desiredModelOverride
-      : mapModelToBrowserLabel(options.model);
+    : isPerplexityModel
+      ? baseModel                               // raw model name: Perplexity executor derives browser label internally
+      : shouldUseOverride
+        ? desiredModelOverride
+        : mapModelToBrowserLabel(options.model);
 
   if (modelStrategy === 'select' && url && isTemporaryChatUrl(url) && /\bpro\b/i.test(desiredModel ?? '')) {
     throw new Error(

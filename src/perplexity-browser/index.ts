@@ -20,8 +20,6 @@ export interface PerplexityBrowserOptions {
   space?: string | null;
   /** Path to inline cookies file — enables auto-refresh write-back after successful runs. */
   cookieFilePath?: string | null;
-  /** Original CLI model name (e.g. 'sonar-deep-research') — used to decide Deep Research activation. */
-  cliModel?: string | null;
 }
 
 /**
@@ -124,7 +122,7 @@ export function createPerplexityBrowserExecutor(
       await race(enableSocialSource(page, log));
 
       // Activate Deep Research mode for sonar-deep-research
-      const normalizedModel = (options.cliModel?.trim() || desiredModel?.trim() || 'sonar').toLowerCase();
+      const normalizedModel = (desiredModel?.trim() || 'sonar').toLowerCase();
       if (normalizedModel === 'sonar-deep-research') {
         await race(activateDeepResearch(page, log));
       }

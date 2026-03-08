@@ -9,14 +9,11 @@ import {
 /**
  * Activate Deep Research mode in Perplexity's web UI.
  *
- * Access path: click "Add files or tools" [+] button → find the Deep Research
- * menuitemradio by its telescope SVG icon (#pplx-icon-telescope) → click to activate.
+ * Access path: click [+] button → find Deep Research item → click to activate.
  *
- * Deep Research is a top-level item in the [+] menu (NOT inside "Connectors & Sources").
- * It uses [role="menuitemradio"] with aria-checked state.
- *
- * After activation, a toolbar indicator button with the telescope icon appears inline
- * in the prompt toolbar, confirming DR mode is on.
+ * Strategies (tried in order):
+ * 1. SVG icon match (#pplx-icon-telescope) on [role="menuitemradio"]
+ * 2. Text match ("Deep Research") on any element in the open menu
  *
  * Must be called BEFORE submitPerplexityPrompt() — only for `sonar-deep-research` model.
  */
@@ -26,8 +23,7 @@ export async function activateDeepResearch(
 ): Promise<void> {
   // First check if DR is already active via the toolbar indicator
   const alreadyActive = await page.evaluate((iconId: string) => {
-    const uses = document.querySelectorAll('button use');
-    for (const u of uses) {
+    for (const u of document.querySelectorAll('button use')) {
       const href = u.getAttribute('xlink:href') || u.getAttribute('href');
       if (href === iconId) {
         const btn = u.closest('button');
@@ -42,13 +38,19 @@ export async function activateDeepResearch(
     return;
   }
 
-  // Step 1: Open the [+] "Add files or tools" menu
+  // Step 1: Open the [+] "Add tools" menu (pointer events required for Radix)
   const openResult = await page.evaluate((labels: string[]) => {
     const buttons = document.querySelectorAll('button');
     for (const btn of buttons) {
       const label = btn.getAttribute('aria-label') ?? '';
       if (labels.some(l => label.includes(l))) {
-        btn.click();
+        const rect = btn.getBoundingClientRect();
+        const evt = { bubbles: true, cancelable: true, clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2 };
+        btn.dispatchEvent(new PointerEvent('pointerdown', evt));
+        btn.dispatchEvent(new MouseEvent('mousedown', evt));
+        btn.dispatchEvent(new PointerEvent('pointerup', evt));
+        btn.dispatchEvent(new MouseEvent('mouseup', evt));
+        btn.dispatchEvent(new MouseEvent('click', evt));
         return { found: true, label };
       }
     }
@@ -60,34 +62,56 @@ export async function activateDeepResearch(
     return;
   }
 
-  // Wait for menu to render
   await new Promise((r) => setTimeout(r, 500));
 
-  // Step 2: Find and click the Deep Research menuitemradio by telescope icon or text
+  // Step 2: Find and click the Deep Research item (pointer events for Radix)
   const toggleResult = await page.evaluate(
     (args: { drIconId: string; drTexts: string[] }) => {
-      // Strategy 1: Find by SVG icon ID (most reliable, locale-independent)
-      const uses = document.querySelectorAll('[role="menuitemradio"] use');
-      for (const u of uses) {
+      const clickRadix = (el: HTMLElement) => {
+        const rect = el.getBoundingClientRect();
+        const evt = { bubbles: true, cancelable: true, clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2 };
+        el.dispatchEvent(new PointerEvent('pointerdown', evt));
+        el.dispatchEvent(new MouseEvent('mousedown', evt));
+        el.dispatchEvent(new PointerEvent('pointerup', evt));
+        el.dispatchEvent(new MouseEvent('mouseup', evt));
+        el.dispatchEvent(new MouseEvent('click', evt));
+      };
+
+      // Strategy 1: SVG icon match on [role="menuitemradio"]
+      for (const u of document.querySelectorAll('[role="menuitemradio"] use')) {
         const href = u.getAttribute('xlink:href') || u.getAttribute('href');
         if (href === args.drIconId) {
-          const radio = u.closest('[role="menuitemradio"]');
+          const radio = u.closest('[role="menuitemradio"]') as HTMLElement;
           if (!radio) continue;
-          const checked = radio.getAttribute('aria-checked') === 'true';
+          const checked = radio.getAttribute('aria-checked') === 'true' || radio.getAttribute('data-state') === 'checked';
           if (checked) return { found: true, alreadyChecked: true };
-          (radio as HTMLElement).click();
+          clickRadix(radio);
           return { found: true, alreadyChecked: false };
         }
       }
 
-      // Strategy 2: Fallback to text match
-      const radios = document.querySelectorAll('[role="menuitemradio"]');
-      for (const radio of radios) {
-        const text = radio.textContent?.trim() ?? '';
+      // Strategy 2: Text match in the open menu (any Radix structure)
+      const scope = document.querySelector('[data-radix-popper-content-wrapper]')
+        || document.querySelector('[data-state="open"][role="dialog"]')
+        || document.querySelector('[data-state="open"]')
+        || document;
+      const candidates = scope.querySelectorAll('[role="menuitemradio"], [role="menuitem"], [role="option"], [data-radix-collection-item]');
+      for (const el of candidates) {
+        const text = el.textContent?.trim() ?? '';
         if (args.drTexts.some(t => text.includes(t))) {
-          const checked = radio.getAttribute('aria-checked') === 'true';
+          const checked = el.getAttribute('aria-checked') === 'true' || el.getAttribute('data-state') === 'checked';
           if (checked) return { found: true, alreadyChecked: true };
-          (radio as HTMLElement).click();
+          clickRadix(el as HTMLElement);
+          return { found: true, alreadyChecked: false };
+        }
+      }
+
+      // Strategy 3: Broadest fallback — any element with matching text inside the popover
+      for (const el of scope.querySelectorAll('div, button')) {
+        const ownText = el.childNodes.length <= 3 ? (el.textContent?.trim() ?? '') : '';
+        if (ownText && args.drTexts.some(t => ownText.includes(t))) {
+          const target = (el.closest('[class*="col-start"]')?.parentElement ?? el) as HTMLElement;
+          clickRadix(target);
           return { found: true, alreadyChecked: false };
         }
       }
@@ -99,17 +123,17 @@ export async function activateDeepResearch(
 
   if (!toggleResult?.found) {
     log?.('[perplexity-browser] Could not find Deep Research toggle in menu — skipping');
+
   } else if (toggleResult.alreadyChecked) {
     log?.('[perplexity-browser] Deep Research already checked in menu');
   } else {
     log?.('[perplexity-browser] Activated Deep Research mode');
   }
 
-  // Step 3: Close menu by clicking the page body
+  // Step 3: Close menu
   await new Promise((r) => setTimeout(r, 300));
   await page.evaluate(() => {
     const main = document.querySelector('main') || document.body;
-    (main as HTMLElement).click();
     const evt = { bubbles: true, cancelable: true, clientX: 10, clientY: 10 };
     main.dispatchEvent(new PointerEvent('pointerdown', evt));
     main.dispatchEvent(new MouseEvent('mousedown', evt));
