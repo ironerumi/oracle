@@ -30,6 +30,15 @@ npx -y @steipete/oracle -p "Write a concise architecture note for the storage ad
 # Perplexity run (web-grounded search; expects PERPLEXITY_API_KEY)
 npx -y @steipete/oracle --model sonar-pro -p "Latest developments in AI reasoning models"
 
+# Perplexity browser mode (no API key; uses inline cookies from Chrome)
+npx -y @steipete/oracle --engine browser -m sonar --browser-inline-cookies-file ~/.oracle/perplexity-cookies.json -p "Latest AI news"
+
+# Perplexity Deep Research (browser; 30 min timeout)
+npx -y @steipete/oracle --engine browser -m sonar-deep-research --browser-inline-cookies-file ~/.oracle/perplexity-cookies.json -p "Comprehensive analysis of WebGPU adoption"
+
+# Perplexity Space (browser; route query to a specific Space)
+npx -y @steipete/oracle --engine browser -m sonar --space "my-project-0s6TGbvNSfe6kPyQRKdFww" -p "Summarize recent findings"
+
 # Multi-model API run
 npx -y @steipete/oracle -p "Cross-check the data layer assumptions" --models gpt-5.1-pro,gemini-3-pro --file "src/**/*.ts"
 
@@ -58,6 +67,7 @@ Engine auto-picks API when `OPENAI_API_KEY` is set, otherwise browser; browser i
 **CLI**
 - API mode expects API keys in your environment: `OPENAI_API_KEY` (GPT-5.x), `GEMINI_API_KEY` (Gemini 3 Pro), `ANTHROPIC_API_KEY` (Claude Sonnet 4.5 / Opus 4.1), `PERPLEXITY_API_KEY` (Sonar models).
 - Gemini browser mode uses Chrome cookies instead of an API key—just be logged into `gemini.google.com` in Chrome (no Python/venv required).
+- Perplexity browser mode uses inline cookies (`--browser-inline-cookies-file ~/.oracle/perplexity-cookies.json`) instead of an API key. Supports `--space <slug>` for Space routing and `sonar-deep-research` for Deep Research. Export cookies once with `npx tsx export-cookies-script "Profile 2"` from the oracle repo.
 - If your Gemini account can’t access “Pro”, Oracle auto-falls back to a supported model for web runs (and logs the fallback in verbose mode).
 - Prefer API mode or `--copy` + manual paste; browser automation is experimental.
 - Browser support: stable on macOS; works on Linux (add `--browser-chrome-path/--browser-cookie-path` when needed) and Windows (manual-login or inline cookies recommended when app-bound cookies block decryption).
@@ -138,6 +148,7 @@ oracle --engine browser \
 | `--browser-thinking-time <light\|standard\|extended\|heavy>` | Set ChatGPT thinking-time intensity (browser; Thinking/Pro models only). |
 | `--browser-port <port>` | Pin the Chrome DevTools port (WSL/Windows firewall helper). |
 | `--browser-inline-cookies[(-file)] <payload|path>` | Supply cookies without Chrome/Keychain (browser). |
+| `--space <slug\|url>` | Perplexity Space slug or URL for query context (browser). |
 | `--browser-timeout`, `--browser-input-timeout` | Control overall/browser input timeouts (supports h/m/s/ms). |
 | `--browser-recheck-delay`, `--browser-recheck-timeout` | Delayed recheck for long Pro runs: wait then retry capture after timeout (supports h/m/s/ms). |
 | `--browser-reuse-wait` | Wait for a shared Chrome profile before launching (parallel browser runs). |
