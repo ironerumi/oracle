@@ -218,3 +218,42 @@ Pre-existing P1 gaps — not introduced by this feature:
 - **Origin brainstorm:** [docs/brainstorms/2026-03-09-ppl-prefix-model-routing-brainstorm.md](docs/brainstorms/2026-03-09-ppl-prefix-model-routing-brainstorm.md) — `ppl/` prefix, model registry, thinking toggle, Max detection
 - **Prior plan:** [docs/plans/2026-03-09-feat-camoufox-headless-perplexity-plan.md](docs/plans/2026-03-09-feat-camoufox-headless-perplexity-plan.md) — Camoufox executor, cookie lifecycle
 - **CLAUDE.md:** `isBrowserCompatible()` in TWO places, `desiredModel` semantics
+
+## Session Log — 2026-03-10
+
+### Decisions
+| Decision | Chosen | Rejected | Why |
+|----------|--------|----------|-----|
+| Picker button click mechanism | Playwright `locator.click()` | `page.evaluate` + `element.click()` | Radix UI menus require real pointer events; evaluate clicks don't open dropdowns |
+| esbuild `__name` leak fix | `context.addInitScript` shim injecting `__name = fn => fn` | Convert all named fns to anonymous / inline pointer events | Shim is one line, survives navigations, fixes all current + future evaluate calls |
+| Menu item scanning | Single `page.evaluate` scan + Playwright click on matched index | Per-item `locator.textContent()` iteration | Playwright waits 30s per item for actionability — too slow for 15+ menu items |
+
+### Files Modified
+- `src/oracle/types.ts` — replaced 4 bare `sonar*` with 10 `ppl/*` in KnownModelName
+- `src/oracle/config.ts` — 10 `ppl/*` MODEL_CONFIGS entries (4 sonar w/ apiModel, 6 browser-only)
+- `src/cli/engine.ts` — resolveEngine perplexity apiModel logic + isBrowserCompatible provider check
+- `src/cli/options.ts` — REMOVED_SONAR migration error, ppl/ passthrough in inferModelFromLabel
+- `src/cli/runOptions.ts` — error message update
+- `src/cli/browserConfig.ts` — BROWSER_MODEL_LABELS ppl/*, isPerplexityModel by provider
+- `bin/oracle-cli.ts` — isPerplexity by provider, --space forces browser, --models+ppl/ error, help text, baseUrl suppression
+- `src/perplexity-browser/constants.ts` — PERPLEXITY_MODEL_LABELS rekeyed ppl/*, THINKING_MODELS map, picker button texts + selectors
+- `src/perplexity-browser/actions/modelSelection.ts` — full rewrite: Playwright locators, thinking toggle, Max detection, single-evaluate scan
+- `src/perplexity-browser/actions/sourceFilter.ts` — `const clickRadix =` → `function clickRadix()` to avoid __name
+- `src/perplexity-browser/actions/deepResearch.ts` — same __name fix + comment update
+- `src/perplexity-browser/index.ts` — __name shim, default model ppl/sonar, DR check ppl/sonar-deep-research
+- `src/perplexity-browser/config.ts` — timeout check ppl/sonar-deep-research
+- `.claude/CLAUDE.md` — updated architecture docs for ppl/* routing
+
+### Session Export
+- Full history: .sessions/260309-1439_fa249bd8/main.md
+
+### Linear Status
+- NAI-114: In Progress — all 4 phases implemented + validated, PR not yet created
+
+### Open / Next
+- **FIXED: `findPickerButton` structural detection** — replaced text/aria-label matching with `page.evaluate` walking up from `[data-lexical-editor]` to find nearest `button[aria-haspopup="menu"]`. Committed as `d52c1cb8`. Needs live retest WITHOUT `--force`.
+- **Live retest without --force** — verify `ppl/claude-sonnet-4.6` works without `--force` flag
+- **Build compiled binary and retest** — user tested with `oracle` (compiled) which has old code; need rebuild then retest
+- **Create PR** — branch `feat/nai-114-ppl-prefix-model-routing` has 9 commits, ready to push + PR after live test
+- **"Connectors & Sources" submenu** — not found in 5/6 browser tests (social source filter skipped). May be UI change or timing. Non-blocking
+- **CLAUDE.md** — `.claude/CLAUDE.md` is gitignored; ppl/* routing docs not in checked-in version
