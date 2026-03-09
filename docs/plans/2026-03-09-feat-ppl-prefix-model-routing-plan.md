@@ -251,9 +251,28 @@ Pre-existing P1 gaps — not introduced by this feature:
 - NAI-114: In Progress — all 4 phases implemented + validated, PR not yet created
 
 ### Open / Next
-- **FIXED: `findPickerButton` structural detection** — replaced text/aria-label matching with `page.evaluate` walking up from `[data-lexical-editor]` to find nearest `button[aria-haspopup="menu"]`. Committed as `d52c1cb8`. Needs live retest WITHOUT `--force`.
-- **Live retest without --force** — verify `ppl/claude-sonnet-4.6` works without `--force` flag
-- **Build compiled binary and retest** — user tested with `oracle` (compiled) which has old code; need rebuild then retest
-- **Create PR** — branch `feat/nai-114-ppl-prefix-model-routing` has 9 commits, ready to push + PR after live test
-- **"Connectors & Sources" submenu** — not found in 5/6 browser tests (social source filter skipped). May be UI change or timing. Non-blocking
+- All items resolved in session 2026-03-10b below
+
+## Session Log — 2026-03-10b
+
+### Decisions
+| Decision | Chosen | Rejected | Why |
+|----------|--------|----------|-----|
+| Picker button detection | Page-wide `button[aria-haspopup="menu"]` search excluding [+] by aria-label | Walk up from `[data-lexical-editor]` ancestors | Model button is in a sibling grid cell, not an ancestor of the editor; ancestor walk finds [+] "Add tools" button instead |
+| Hydration wait | Wait for `[data-lexical-editor]` + 1s delay before searching | `waitUntil: 'domcontentloaded'` only | Model picker button renders only after React hydration; `domcontentloaded` returns too early |
+| Opus Max-only handling | No special handling — Opus IS in picker for all users (lock icon for non-Max) | `PERPLEXITY_MAX_ONLY_MODELS` fail-fast array | User confirmed Opus is visible but gated, not hidden; wrong to assume hidden |
+
+### Files Modified
+- `src/perplexity-browser/actions/modelSelection.ts` — rewrote `findPickerButton()`: hydration wait + page-wide search excluding [+] button; removed `PERPLEXITY_MAX_ONLY_MODELS` import and fail-fast; removed `MODEL_PICKER_BUTTON_TEXTS` import (unused)
+- `src/perplexity-browser/constants.ts` — removed `PERPLEXITY_MAX_ONLY_MODELS` (was added and reverted in same session)
+
+### Session Export
+- Full history: .sessions/260309-1439_fa249bd8/main.md
+
+### Linear Status
+- NAI-114: In Progress — picker button fix verified for Sonnet + Opus, binary compiled, awaiting user's manual Opus test then PR
+
+### Open / Next
+- **User manual test of `ppl/claude-opus-4.6`** — binary compiled, user testing now
+- **Create PR** — branch `feat/nai-114-ppl-prefix-model-routing` has 12 commits, push + `gh pr create` after user confirms
 - **CLAUDE.md** — `.claude/CLAUDE.md` is gitignored; ppl/* routing docs not in checked-in version
