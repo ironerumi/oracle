@@ -15,7 +15,7 @@ import { openAddToolsMenu, dismissRadixMenu } from './radixUtils.js';
  * 1. SVG icon match (#pplx-icon-telescope) on [role="menuitemradio"]
  * 2. Text match ("Deep Research") on any element in the open menu
  *
- * Must be called BEFORE submitPerplexityPrompt() — only for `sonar-deep-research` model.
+ * Must be called BEFORE submitPerplexityPrompt() — only for `ppl/sonar-deep-research` model.
  */
 export async function activateDeepResearch(
   page: Page,

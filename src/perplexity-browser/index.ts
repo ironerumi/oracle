@@ -115,7 +115,7 @@ export function createPerplexityBrowserExecutor(
         await race(navigateToSpace(page, space, log));
       }
 
-      // Select model in picker (skips for default 'sonar')
+      // Select model in picker (skips for default 'ppl/sonar')
       await race(selectPerplexityModel(page, desiredModel, log));
 
       // Enable Social source filter (always on for richer results)

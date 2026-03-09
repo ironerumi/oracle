@@ -1049,7 +1049,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       ? MODEL_CONFIGS[resolvedModel].apiModel ?? resolvedModel
       : resolvedModel;
   const resolvedBaseUrl = normalizeBaseUrl(
-    options.baseUrl ?? (isClaude ? process.env.ANTHROPIC_BASE_URL : process.env.OPENAI_BASE_URL),
+    options.baseUrl ?? (isPerplexity ? undefined : isClaude ? process.env.ANTHROPIC_BASE_URL : process.env.OPENAI_BASE_URL),
   );
   const { models: _rawModels, ...optionsWithoutModels } = options;
   const resolvedOptions: ResolvedCliOptions = { ...optionsWithoutModels, model: resolvedModel };
