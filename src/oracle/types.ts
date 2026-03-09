@@ -12,10 +12,16 @@ export type KnownModelName =
   | 'claude-4.5-sonnet'
   | 'claude-4.1-opus'
   | 'grok-4.1'
-  | 'sonar'
-  | 'sonar-pro'
-  | 'sonar-reasoning-pro'
-  | 'sonar-deep-research';
+  | 'ppl/sonar'
+  | 'ppl/sonar-pro'
+  | 'ppl/sonar-reasoning-pro'
+  | 'ppl/sonar-deep-research'
+  | 'ppl/best'
+  | 'ppl/gpt-5.4'
+  | 'ppl/gemini-3.1-pro'
+  | 'ppl/claude-sonnet-4.6'
+  | 'ppl/claude-opus-4.6'
+  | 'ppl/kimi-k2.5';
 
 // ModelName now allows arbitrary strings so OpenRouter / custom IDs can pass through.
 export type ModelName = KnownModelName | (string & {});

@@ -60,7 +60,7 @@ export function resolveRunOptionsFromConfig({
   const hasNonBrowserCompatibleTarget = (browserRequested || browserConfigured) && allModels.some((m) => !isBrowserCompatible(m));
   if (hasNonBrowserCompatibleTarget) {
     throw new PromptValidationError(
-      'Browser engine only supports GPT, Gemini, and Perplexity models. Re-run with --engine api for Grok, Claude, or other models.',
+      'Browser engine only supports GPT, Gemini, and Perplexity (ppl/*) models. Re-run with --engine api for Grok, Claude, or other models.',
       { engine: 'browser', models: allModels },
     );
   }

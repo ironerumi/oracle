@@ -3,6 +3,7 @@ title: "feat: ppl/ prefix model routing for Perplexity browser"
 type: feat
 status: active
 date: 2026-03-09
+linear_issue: NAI-114
 origin: docs/brainstorms/2026-03-09-ppl-prefix-model-routing-brainstorm.md
 ---
 

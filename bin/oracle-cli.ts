@@ -275,7 +275,7 @@ program
   .option('-s, --slug <words>', 'Custom session slug (3-5 words).')
   .option(
     '-m, --model <model>',
-    'Model to target (gpt-5.2-pro default; also supports gpt-5.1-pro alias). Also gpt-5-pro, gpt-5.1, gpt-5.1-codex API-only, gpt-5.2, gpt-5.2-instant, gpt-5.2-pro, gemini-3-pro, claude-4.5-sonnet, claude-4.1-opus, sonar, sonar-pro, sonar-reasoning-pro, sonar-deep-research, or ChatGPT labels like "5.2 Thinking" for browser runs).',
+    'Model to target (gpt-5.2-pro default). Also gpt-5-pro, gpt-5.1, gpt-5.1-codex API-only, gpt-5.2, gpt-5.2-instant, gpt-5.2-pro, gemini-3-pro, claude-4.5-sonnet, claude-4.1-opus, ppl/sonar, ppl/sonar-pro, ppl/sonar-reasoning-pro, ppl/sonar-deep-research, ppl/best, ppl/gpt-5.4, ppl/gemini-3.1-pro, ppl/claude-sonnet-4.6, ppl/claude-opus-4.6, ppl/kimi-k2.5, or ChatGPT labels like "5.2 Thinking" for browser runs).',
     normalizeModelOption,
   )
   .addOption(
@@ -999,7 +999,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       : resolveApiModel(cliModelArg || DEFAULT_MODEL);
   const primaryModelCandidate = normalizedMultiModels[0] ?? resolvedModelCandidate;
   const isGemini = primaryModelCandidate.startsWith('gemini');
-  const isPerplexity = primaryModelCandidate.startsWith('sonar');
+  const isPerplexity = isKnownModel(primaryModelCandidate) && MODEL_CONFIGS[primaryModelCandidate]?.provider === 'perplexity';
   const isCodex = primaryModelCandidate.startsWith('gpt-5.1-codex');
   const isClaude = primaryModelCandidate.startsWith('claude');
   const userForcedBrowser = options.browser || options.engine === 'browser';
@@ -1010,7 +1010,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       : !isBrowserCompatible(resolvedModelCandidate));
   if (hasNonBrowserCompatibleTarget) {
     throw new Error(
-      'Browser engine only supports GPT, Gemini, and Perplexity models. Re-run with --engine api for Grok, Claude, or other models.'
+      'Browser engine only supports GPT, Gemini, and Perplexity (ppl/*) models. Re-run with --engine api for Grok, Claude, or other models.'
     );
   }
   if (isClaude && engine === 'browser') {
@@ -1022,10 +1022,11 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     engine = 'api';
   }
   if (normalizedMultiModels.length > 0) {
-    if (isPerplexity && (engine === 'browser' || userForcedBrowser)) {
+    const hasPplModel = normalizedMultiModels.some((m) => m.startsWith('ppl/')) || primaryModelCandidate.startsWith('ppl/');
+    if (hasPplModel) {
       throw new Error(
-        'Perplexity browser mode supports a single model only. ' +
-        'Remove --models or use --engine api with PERPLEXITY_API_KEY for multi-model runs.',
+        'Perplexity models (ppl/*) cannot be used with --models. ' +
+        'Browser executor supports a single model only.',
       );
     }
     engine = 'api';
@@ -1034,7 +1035,11 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     throw new Error('--remote-host does not support --models yet. Use API engine locally instead.');
   }
   if (options.space && !isPerplexity) {
-    throw new Error('--space is only supported with Perplexity models (sonar, sonar-pro, sonar-reasoning-pro, sonar-deep-research).');
+    throw new Error('--space is only supported with Perplexity models (ppl/*).');
+  }
+  // --space forces browser engine for ppl/* models (overrides API preference)
+  if (options.space && isPerplexity && engine === 'api') {
+    engine = 'browser';
   }
   const resolvedModel: ModelName =
     normalizedMultiModels[0] ?? (isGemini ? resolveApiModel(cliModelArg) : resolvedModelCandidate);

@@ -18,7 +18,7 @@ export function defaultWaitPreference(model: string, engine: EngineMode): boolea
  * 1) Legacy --browser flag forces browser.
  * 2) Explicit --engine value.
  * 3) ORACLE_ENGINE environment override (api|browser).
- * 4) OPENAI_API_KEY decides: api when set, otherwise browser.
+ * 4) Provider-specific key checks → fallback to OPENAI_API_KEY.
  */
 export function resolveEngine(
   {
@@ -32,6 +32,18 @@ export function resolveEngine(
     return 'browser';
   }
   if (engine) {
+    // Validate explicit --engine api for ppl/* models without apiModel
+    if (engine === 'api' && model && isKnownModel(model)) {
+      const config = MODEL_CONFIGS[model];
+      if (config?.provider === 'perplexity') {
+        if (!config.apiModel) {
+          throw new Error(`'${model}' has no API equivalent. Remove --engine api.`);
+        }
+        if (!env.PERPLEXITY_API_KEY) {
+          throw new Error(`'${model}' requires PERPLEXITY_API_KEY for API mode.`);
+        }
+      }
+    }
     return engine;
   }
   const envEngine = normalizeEngineMode(env.ORACLE_ENGINE);
@@ -40,14 +52,17 @@ export function resolveEngine(
   }
   // Check Perplexity key for known Perplexity models
   if (model && isKnownModel(model) && MODEL_CONFIGS[model]?.provider === 'perplexity') {
-    return env.PERPLEXITY_API_KEY ? 'api' : 'browser';
+    const config = MODEL_CONFIGS[model];
+    if (config.apiModel && env.PERPLEXITY_API_KEY) return 'api';
+    return 'browser';
   }
   return env.OPENAI_API_KEY ? 'api' : 'browser';
 }
 
 /** Check if a model is supported by the browser engine. */
 export function isBrowserCompatible(model: string): boolean {
-  return model.startsWith('gpt-') || model.startsWith('gemini') || model.startsWith('sonar');
+  if (isKnownModel(model) && MODEL_CONFIGS[model]?.provider === 'perplexity') return true;
+  return model.startsWith('gpt-') || model.startsWith('gemini');
 }
 
 function normalizeEngineMode(raw: unknown): EngineMode | null {
