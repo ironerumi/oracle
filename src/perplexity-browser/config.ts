@@ -8,5 +8,5 @@ export function resolvePerplexityTimeout(model: string | null | undefined, confi
   if (typeof configTimeout === 'number' && Number.isFinite(configTimeout) && configTimeout > 0) {
     return configTimeout;
   }
-  return model === 'sonar-deep-research' ? DEEP_RESEARCH_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
+  return model === 'ppl/sonar-deep-research' ? DEEP_RESEARCH_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
 }

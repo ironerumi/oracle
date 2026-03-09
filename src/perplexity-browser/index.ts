@@ -122,8 +122,8 @@ export function createPerplexityBrowserExecutor(
       await race(enableSocialSource(page, log));
 
       // Activate Deep Research mode for sonar-deep-research
-      const normalizedModel = (desiredModel?.trim() || 'sonar').toLowerCase();
-      if (normalizedModel === 'sonar-deep-research') {
+      const normalizedModel = (desiredModel?.trim() || 'ppl/sonar').toLowerCase();
+      if (normalizedModel === 'ppl/sonar-deep-research') {
         await race(activateDeepResearch(page, log));
       }
 
