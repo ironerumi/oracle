@@ -5,6 +5,7 @@ import {
   MODEL_PICKER_SELECTORS,
   PERPLEXITY_MODEL_LABELS,
   PERPLEXITY_THINKING_MODELS,
+  PERPLEXITY_MAX_ONLY_MODELS,
 } from '../constants.js';
 
 /**
@@ -94,18 +95,17 @@ export async function selectPerplexityModel(
 
   if (scanResult.matchIndex === -1) {
     await page.keyboard.press('Escape');
+    // Max-only models are hidden entirely for non-Max users (not disabled, just absent)
+    if (PERPLEXITY_MAX_ONLY_MODELS.includes(model)) {
+      throw new BrowserAutomationError(
+        `${model} requires a Perplexity Max subscription (model not available in picker).`,
+        { stage: 'model-selection' },
+      );
+    }
     throw new BrowserAutomationError(
       `Could not find model matching ${JSON.stringify(labels)} in picker. ` +
         `Available: ${scanResult.available.join(', ') || '(none)'}. ` +
         'Update PERPLEXITY_MODEL_LABELS in constants.ts.',
-      { stage: 'model-selection' },
-    );
-  }
-
-  if (scanResult.matchDisabled) {
-    await page.keyboard.press('Escape');
-    throw new BrowserAutomationError(
-      'ppl/claude-opus-4.6 requires Perplexity Max subscription.',
       { stage: 'model-selection' },
     );
   }
