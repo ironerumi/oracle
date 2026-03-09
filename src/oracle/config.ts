@@ -10,6 +10,26 @@ export const PRO_MODELS = new Set<ProModelName>(['gpt-5.1-pro', 'gpt-5-pro', 'gp
 const countTokensAnthropic: TokenizerFn = (input: unknown): number =>
   countTokensAnthropicRaw(stringifyTokenizerInput(input));
 
+function pplConfigs<T extends KnownModelName>(
+  entries: { name: T; apiModel?: string; inputLimit?: number; reasoning?: ModelConfig['reasoning'] }[],
+): Record<T, ModelConfig> {
+  const result = {} as Record<T, ModelConfig>;
+  for (const e of entries) {
+    result[e.name] = {
+      model: e.name,
+      ...(e.apiModel ? { apiModel: e.apiModel } : {}),
+      provider: 'perplexity',
+      tokenizer: countTokensGpt5 as TokenizerFn,
+      inputLimit: e.inputLimit ?? 128000,
+      pricing: null,
+      reasoning: e.reasoning ?? null,
+      supportsBackground: false,
+      supportsSearch: true,
+    };
+  }
+  return result;
+}
+
 export const MODEL_CONFIGS: Record<KnownModelName, ModelConfig> = {
   'gpt-5.1-pro': {
     model: 'gpt-5.1-pro',
@@ -146,110 +166,18 @@ export const MODEL_CONFIGS: Record<KnownModelName, ModelConfig> = {
     supportsSearch: true,
     searchToolType: 'web_search',
   },
-  'ppl/sonar': {
-    model: 'ppl/sonar',
-    apiModel: 'sonar',
-    provider: 'perplexity',
-    tokenizer: countTokensGpt5 as TokenizerFn,
-    inputLimit: 128000,
-    pricing: null,
-    reasoning: null,
-    supportsBackground: false,
-    supportsSearch: true,
-  },
-  'ppl/sonar-pro': {
-    model: 'ppl/sonar-pro',
-    apiModel: 'sonar-pro',
-    provider: 'perplexity',
-    tokenizer: countTokensGpt5 as TokenizerFn,
-    inputLimit: 200000,
-    pricing: null,
-    reasoning: null,
-    supportsBackground: false,
-    supportsSearch: true,
-  },
-  'ppl/sonar-reasoning-pro': {
-    model: 'ppl/sonar-reasoning-pro',
-    apiModel: 'sonar-reasoning-pro',
-    provider: 'perplexity',
-    tokenizer: countTokensGpt5 as TokenizerFn,
-    inputLimit: 128000,
-    pricing: null,
-    reasoning: { effort: 'high' },
-    supportsBackground: false,
-    supportsSearch: true,
-  },
-  'ppl/sonar-deep-research': {
-    model: 'ppl/sonar-deep-research',
-    apiModel: 'sonar-deep-research',
-    provider: 'perplexity',
-    tokenizer: countTokensGpt5 as TokenizerFn,
-    inputLimit: 128000,
-    pricing: null,
-    reasoning: null,
-    supportsBackground: false,
-    supportsSearch: true,
-  },
-  'ppl/best': {
-    model: 'ppl/best',
-    provider: 'perplexity',
-    tokenizer: countTokensGpt5 as TokenizerFn,
-    inputLimit: 128000,
-    pricing: null,
-    reasoning: null,
-    supportsBackground: false,
-    supportsSearch: true,
-  },
-  'ppl/gpt-5.4': {
-    model: 'ppl/gpt-5.4',
-    provider: 'perplexity',
-    tokenizer: countTokensGpt5 as TokenizerFn,
-    inputLimit: 128000,
-    pricing: null,
-    reasoning: null,
-    supportsBackground: false,
-    supportsSearch: true,
-  },
-  'ppl/gemini-3.1-pro': {
-    model: 'ppl/gemini-3.1-pro',
-    provider: 'perplexity',
-    tokenizer: countTokensGpt5 as TokenizerFn,
-    inputLimit: 128000,
-    pricing: null,
-    reasoning: null,
-    supportsBackground: false,
-    supportsSearch: true,
-  },
-  'ppl/claude-sonnet-4.6': {
-    model: 'ppl/claude-sonnet-4.6',
-    provider: 'perplexity',
-    tokenizer: countTokensGpt5 as TokenizerFn,
-    inputLimit: 128000,
-    pricing: null,
-    reasoning: null,
-    supportsBackground: false,
-    supportsSearch: true,
-  },
-  'ppl/claude-opus-4.6': {
-    model: 'ppl/claude-opus-4.6',
-    provider: 'perplexity',
-    tokenizer: countTokensGpt5 as TokenizerFn,
-    inputLimit: 128000,
-    pricing: null,
-    reasoning: null,
-    supportsBackground: false,
-    supportsSearch: true,
-  },
-  'ppl/kimi-k2.5': {
-    model: 'ppl/kimi-k2.5',
-    provider: 'perplexity',
-    tokenizer: countTokensGpt5 as TokenizerFn,
-    inputLimit: 128000,
-    pricing: null,
-    reasoning: null,
-    supportsBackground: false,
-    supportsSearch: true,
-  },
+  ...pplConfigs([
+    { name: 'ppl/sonar', apiModel: 'sonar' },
+    { name: 'ppl/sonar-pro', apiModel: 'sonar-pro', inputLimit: 200000 },
+    { name: 'ppl/sonar-reasoning-pro', apiModel: 'sonar-reasoning-pro', reasoning: { effort: 'high' as const } },
+    { name: 'ppl/sonar-deep-research', apiModel: 'sonar-deep-research' },
+    { name: 'ppl/best' },
+    { name: 'ppl/gpt-5.4' },
+    { name: 'ppl/gemini-3.1-pro' },
+    { name: 'ppl/claude-sonnet-4.6' },
+    { name: 'ppl/claude-opus-4.6' },
+    { name: 'ppl/kimi-k2.5' },
+  ]),
 };
 
 export const DEFAULT_SYSTEM_PROMPT = [

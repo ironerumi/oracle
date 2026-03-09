@@ -7,22 +7,22 @@ import {
 
 describe('resolvePerplexityTimeout', () => {
   test('returns default for standard models', () => {
-    expect(resolvePerplexityTimeout('sonar')).toBe(DEFAULT_TIMEOUT_MS);
-    expect(resolvePerplexityTimeout('sonar-pro')).toBe(DEFAULT_TIMEOUT_MS);
+    expect(resolvePerplexityTimeout('ppl/sonar')).toBe(DEFAULT_TIMEOUT_MS);
+    expect(resolvePerplexityTimeout('ppl/sonar-pro')).toBe(DEFAULT_TIMEOUT_MS);
   });
 
   test('returns 30min for deep-research', () => {
-    expect(resolvePerplexityTimeout('sonar-deep-research')).toBe(DEEP_RESEARCH_TIMEOUT_MS);
+    expect(resolvePerplexityTimeout('ppl/sonar-deep-research')).toBe(DEEP_RESEARCH_TIMEOUT_MS);
   });
 
   test('respects explicit config timeout', () => {
-    expect(resolvePerplexityTimeout('sonar-deep-research', 60_000)).toBe(60_000);
+    expect(resolvePerplexityTimeout('ppl/sonar-deep-research', 60_000)).toBe(60_000);
   });
 
   test('ignores invalid config timeout', () => {
-    expect(resolvePerplexityTimeout('sonar', NaN)).toBe(DEFAULT_TIMEOUT_MS);
-    expect(resolvePerplexityTimeout('sonar', 0)).toBe(DEFAULT_TIMEOUT_MS);
-    expect(resolvePerplexityTimeout('sonar', -1)).toBe(DEFAULT_TIMEOUT_MS);
+    expect(resolvePerplexityTimeout('ppl/sonar', NaN)).toBe(DEFAULT_TIMEOUT_MS);
+    expect(resolvePerplexityTimeout('ppl/sonar', 0)).toBe(DEFAULT_TIMEOUT_MS);
+    expect(resolvePerplexityTimeout('ppl/sonar', -1)).toBe(DEFAULT_TIMEOUT_MS);
   });
 
   test('returns default for null/undefined model', () => {

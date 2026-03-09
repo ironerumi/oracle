@@ -210,10 +210,10 @@ describe('resolveRunOptionsFromConfig', () => {
     const env: NodeJS.ProcessEnv = { OPENAI_BASE_URL: 'https://openai.example/v1' } as NodeJS.ProcessEnv;
     const { runOptions } = resolveRunOptionsFromConfig({
       prompt: basePrompt,
-      model: 'sonar',
+      model: 'ppl/sonar',
       env,
     });
-    expect(runOptions.model).toBe('sonar');
+    expect(runOptions.model).toBe('ppl/sonar');
     // baseUrl should be undefined (not inherited from OPENAI_BASE_URL)
     // run.ts fills from PERPLEXITY_BASE_URL later
     expect(runOptions.baseUrl).toBeUndefined();

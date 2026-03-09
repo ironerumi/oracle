@@ -1,4 +1,4 @@
-import { isProModel, isKnownModel } from '../oracle/modelResolver.js';
+import { isProModel, isKnownModel, isPerplexityModel } from '../oracle/modelResolver.js';
 import { MODEL_CONFIGS } from '../oracle/config.js';
 
 export type EngineMode = 'api' | 'browser';
@@ -33,15 +33,13 @@ export function resolveEngine(
   }
   if (engine) {
     // Validate explicit --engine api for ppl/* models without apiModel
-    if (engine === 'api' && model && isKnownModel(model)) {
-      const config = MODEL_CONFIGS[model];
-      if (config?.provider === 'perplexity') {
-        if (!config.apiModel) {
-          throw new Error(`'${model}' has no API equivalent. Remove --engine api.`);
-        }
-        if (!env.PERPLEXITY_API_KEY) {
-          throw new Error(`'${model}' requires PERPLEXITY_API_KEY for API mode.`);
-        }
+    if (engine === 'api' && model && isPerplexityModel(model)) {
+      const config = MODEL_CONFIGS[model as keyof typeof MODEL_CONFIGS];
+      if (!config.apiModel) {
+        throw new Error(`'${model}' has no API equivalent. Remove --engine api.`);
+      }
+      if (!env.PERPLEXITY_API_KEY) {
+        throw new Error(`'${model}' requires PERPLEXITY_API_KEY for API mode.`);
       }
     }
     return engine;
@@ -51,8 +49,8 @@ export function resolveEngine(
     return envEngine;
   }
   // Check Perplexity key for known Perplexity models
-  if (model && isKnownModel(model) && MODEL_CONFIGS[model]?.provider === 'perplexity') {
-    const config = MODEL_CONFIGS[model];
+  if (model && isPerplexityModel(model)) {
+    const config = MODEL_CONFIGS[model as keyof typeof MODEL_CONFIGS];
     if (config.apiModel && env.PERPLEXITY_API_KEY) return 'api';
     return 'browser';
   }
@@ -61,7 +59,7 @@ export function resolveEngine(
 
 /** Check if a model is supported by the browser engine. */
 export function isBrowserCompatible(model: string): boolean {
-  if (isKnownModel(model) && MODEL_CONFIGS[model]?.provider === 'perplexity') return true;
+  if (isPerplexityModel(model)) return true;
   return model.startsWith('gpt-') || model.startsWith('gemini');
 }
 

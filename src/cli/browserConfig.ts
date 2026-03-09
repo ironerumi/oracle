@@ -2,9 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { BrowserSessionConfig } from '../sessionStore.js';
 import type { ModelName, ThinkingTimeLevel } from '../oracle.js';
-import { MODEL_CONFIGS } from '../oracle.js';
-import { isKnownModel } from '../oracle/modelResolver.js';
+import { isPerplexityModel } from '../oracle/modelResolver.js';
 import { CHATGPT_URL, DEFAULT_MODEL_STRATEGY, DEFAULT_MODEL_TARGET, isTemporaryChatUrl, normalizeChatgptUrl, parseDuration } from '../browserMode.js';
+import { PERPLEXITY_MODEL_LABELS } from '../perplexity-browser/constants.js';
 import { normalizeBrowserModelStrategy } from '../browser/modelStrategy.js';
 import type { BrowserModelStrategy } from '../browser/types.js';
 import type { CookieParam } from '../browser/types.js';
@@ -29,18 +29,10 @@ const BROWSER_MODEL_LABELS: [ModelName, string][] = [
   ['gpt-5.2', 'GPT-5.2'],       // Selects "Auto" in ChatGPT UI
   ['gpt-5.1', 'GPT-5.2'],       // Legacy alias → Auto
   ['gemini-3-pro', 'Gemini 3 Pro'],
-  // Perplexity models — all ppl/* variants.
-  // The web UI picker is a flat cross-provider list; sonar variants map to "Sonar".
-  ['ppl/sonar-deep-research', 'Sonar'],
-  ['ppl/sonar-reasoning-pro', 'Sonar'],
-  ['ppl/sonar-pro', 'Sonar'],
-  ['ppl/sonar', 'Sonar'],
-  ['ppl/best', 'Best'],
-  ['ppl/gpt-5.4', 'GPT-5.4'],
-  ['ppl/gemini-3.1-pro', 'Gemini 3.1 Pro'],
-  ['ppl/claude-sonnet-4.6', 'Claude Sonnet 4.6'],
-  ['ppl/claude-opus-4.6', 'Claude Opus 4.6'],
-  ['ppl/kimi-k2.5', 'Kimi K2.5'],
+  // Perplexity models — derived from PERPLEXITY_MODEL_LABELS (first/English label).
+  ...Object.entries(PERPLEXITY_MODEL_LABELS).map(
+    ([model, labels]) => [model, labels[0]] as [ModelName, string],
+  ),
 ];
 
 export interface BrowserFlagOptions {
@@ -131,10 +123,10 @@ export async function buildBrowserConfig(options: BrowserFlagOptions): Promise<B
   const rawUrl = options.chatgptUrl ?? options.browserUrl;
   const url = rawUrl ? normalizeChatgptUrl(rawUrl, CHATGPT_URL) : undefined;
 
-  const isPerplexityModel = isKnownModel(options.model) && MODEL_CONFIGS[options.model]?.provider === 'perplexity';
+  const isPplModel = isPerplexityModel(options.model);
   const desiredModel = isChatGptModel
     ? mapModelToBrowserLabel(options.model)
-    : isPerplexityModel
+    : isPplModel
       ? baseModel                               // raw model name: Perplexity executor derives browser label internally
       : shouldUseOverride
         ? desiredModelOverride

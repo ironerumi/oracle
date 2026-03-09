@@ -7,6 +7,8 @@ import {
   PERPLEXITY_THINKING_MODELS,
 } from '../constants.js';
 
+const MENU_ITEM_SELECTOR = '[role="menuitem"], [role="option"], [role="menuitemradio"], [role="listbox"] button, [data-radix-collection-root] button';
+
 /**
  * Select a Perplexity model via the web UI picker.
  *
@@ -69,9 +71,8 @@ export async function selectPerplexityModel(
 
   // Scan all menu items in a single evaluate (avoids per-item Playwright timeouts)
   const scanResult = await page.evaluate(
-    (args: { targetLabels: string[]; checkMaxDisabled: boolean }) => {
-      const sel = '[role="menuitem"], [role="option"], [role="menuitemradio"], [role="listbox"] button, [data-radix-collection-root] button';
-      const candidates = document.querySelectorAll(sel);
+    (args: { targetLabels: string[]; checkMaxDisabled: boolean; sel: string }) => {
+      const candidates = document.querySelectorAll(args.sel);
       const available: string[] = [];
       let matchIndex = -1;
       let matchDisabled = false;
@@ -89,7 +90,7 @@ export async function selectPerplexityModel(
       }
       return { matchIndex, matchDisabled, available: available.slice(0, 15) };
     },
-    { targetLabels: labels, checkMaxDisabled: model === 'ppl/claude-opus-4.6' },
+    { targetLabels: labels, checkMaxDisabled: model === 'ppl/claude-opus-4.6', sel: MENU_ITEM_SELECTOR },
   );
 
   if (scanResult.matchIndex === -1) {
@@ -103,7 +104,7 @@ export async function selectPerplexityModel(
   }
 
   // Click the matched item via Playwright locator (proper pointer events)
-  const menuItems = page.locator('[role="menuitem"], [role="option"], [role="menuitemradio"], [role="listbox"] button, [data-radix-collection-root] button');
+  const menuItems = page.locator(MENU_ITEM_SELECTOR);
   const matched = menuItems.nth(scanResult.matchIndex);
   await matched.click({ timeout: 5000 });
   await page.waitForTimeout(300);

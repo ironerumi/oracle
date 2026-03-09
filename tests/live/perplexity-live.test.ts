@@ -223,7 +223,7 @@ describe('Perplexity routing', () => {
 
       await expect(
         runOracle(
-          { prompt: 'test', model: 'sonar', search: false },
+          { prompt: 'test', model: 'ppl/sonar', search: false },
           { log: () => {}, write: () => true },
         ),
       ).rejects.toThrow(/PERPLEXITY_API_KEY/);
@@ -243,7 +243,7 @@ describe('Perplexity routing', () => {
 
       await expect(
         runOracle(
-          { prompt: 'test', model: 'sonar', search: false },
+          { prompt: 'test', model: 'ppl/sonar', search: false },
           { log: () => {}, write: () => true },
         ),
       ).rejects.toThrow(/PERPLEXITY_API_KEY/);
