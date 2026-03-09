@@ -85,9 +85,6 @@ export const PERPLEXITY_MODEL_LABELS: Record<string, string[]> = {
   'ppl/kimi-k2.5': ['Kimi K2.5'],
 };
 
-// Max-only models: hidden from picker for non-Max users (not disabled, just absent).
-export const PERPLEXITY_MAX_ONLY_MODELS: string[] = ['ppl/claude-opus-4.6'];
-
 // Thinking toggle: models that support extended thinking in the Perplexity UI.
 // Value = default state (true = ON by default, false = OFF by default).
 export const PERPLEXITY_THINKING_MODELS: Record<string, boolean> = {

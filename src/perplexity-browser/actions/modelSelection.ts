@@ -5,7 +5,6 @@ import {
   MODEL_PICKER_SELECTORS,
   PERPLEXITY_MODEL_LABELS,
   PERPLEXITY_THINKING_MODELS,
-  PERPLEXITY_MAX_ONLY_MODELS,
 } from '../constants.js';
 
 /**
@@ -95,13 +94,6 @@ export async function selectPerplexityModel(
 
   if (scanResult.matchIndex === -1) {
     await page.keyboard.press('Escape');
-    // Max-only models are hidden entirely for non-Max users (not disabled, just absent)
-    if (PERPLEXITY_MAX_ONLY_MODELS.includes(model)) {
-      throw new BrowserAutomationError(
-        `${model} requires a Perplexity Max subscription (model not available in picker).`,
-        { stage: 'model-selection' },
-      );
-    }
     throw new BrowserAutomationError(
       `Could not find model matching ${JSON.stringify(labels)} in picker. ` +
         `Available: ${scanResult.available.join(', ') || '(none)'}. ` +
@@ -132,26 +124,31 @@ export async function selectPerplexityModel(
 }
 
 async function findPickerButton(page: Page) {
-  // Try aria-label selectors first (works when label is static like "Select model")
+  // Wait for the prompt editor to be interactive (React hydration complete).
+  // The Model picker button only renders after hydration, so we must wait.
+  await page.locator('[data-lexical-editor]').first().waitFor({ timeout: 10000 }).catch(() => {});
+  // Additional wait for toolbar buttons to render after editor
+  await page.waitForTimeout(1000);
+
+  // Try aria-label selectors first (works when label is static like "Model")
   for (const sel of MODEL_PICKER_SELECTORS) {
     const loc = page.locator(sel).first();
     if (await loc.count() > 0) return loc;
   }
 
-  // Structural approach: walk up from the lexical editor to find the toolbar's
-  // button[aria-haspopup="menu"]. The button text is dynamic (shows current model name)
-  // so text matching is unreliable. Tag the button with a data attribute, then locate it.
+  // Structural approach: find all button[aria-haspopup="menu"] on the page and pick
+  // the model picker (not the [+] "Add files or tools" button). The Model picker button
+  // is in a sibling grid cell to the editor, not in the editor's ancestor tree, so we
+  // search the whole page and exclude known non-picker buttons by aria-label.
   const tagged = await page.evaluate(() => {
-    const editor = document.querySelector('[data-lexical-editor]');
-    if (!editor) return false;
-    // Walk up ancestors to find a container that holds both the editor and the picker button
-    let ancestor: HTMLElement | null = editor.parentElement;
-    for (let depth = 0; ancestor && depth < 10; depth++, ancestor = ancestor.parentElement) {
-      const btn = ancestor.querySelector('button[aria-haspopup="menu"]');
-      if (btn) {
-        btn.setAttribute('data-oracle-picker', 'true');
-        return true;
-      }
+    const btns = document.querySelectorAll('button[aria-haspopup="menu"]');
+    for (const btn of btns) {
+      const label = (btn.getAttribute('aria-label') ?? '').toLowerCase();
+      // Skip the [+] "Add files or tools" button and any nav menus
+      if (label.includes('add') || label.includes('ツール') || label.includes('ファイル')
+        || label.includes('menu') || label.includes('navigation')) continue;
+      btn.setAttribute('data-oracle-picker', 'true');
+      return true;
     }
     return false;
   });
