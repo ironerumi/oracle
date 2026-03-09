@@ -3,7 +3,6 @@ import type { BrowserLogger } from '../../browser/types.js';
 import { BrowserAutomationError } from '../../oracle/errors.js';
 import {
   MODEL_PICKER_SELECTORS,
-  MODEL_PICKER_BUTTON_TEXTS,
   PERPLEXITY_MODEL_LABELS,
   PERPLEXITY_THINKING_MODELS,
 } from '../constants.js';
@@ -133,19 +132,35 @@ export async function selectPerplexityModel(
 }
 
 async function findPickerButton(page: Page) {
-  // Try aria-label selectors first
+  // Try aria-label selectors first (works when label is static like "Select model")
   for (const sel of MODEL_PICKER_SELECTORS) {
     const loc = page.locator(sel).first();
     if (await loc.count() > 0) return loc;
   }
-  // Fallback: find button by exact text matching MODEL_PICKER_BUTTON_TEXTS
-  for (const text of MODEL_PICKER_BUTTON_TEXTS) {
-    const loc = page.locator(`button:text-is("${text}")`).first();
+
+  // Structural approach: walk up from the lexical editor to find the toolbar's
+  // button[aria-haspopup="menu"]. The button text is dynamic (shows current model name)
+  // so text matching is unreliable. Tag the button with a data attribute, then locate it.
+  const tagged = await page.evaluate(() => {
+    const editor = document.querySelector('[data-lexical-editor]');
+    if (!editor) return false;
+    // Walk up ancestors to find a container that holds both the editor and the picker button
+    let ancestor: HTMLElement | null = editor.parentElement;
+    for (let depth = 0; ancestor && depth < 10; depth++, ancestor = ancestor.parentElement) {
+      const btn = ancestor.querySelector('button[aria-haspopup="menu"]');
+      if (btn) {
+        btn.setAttribute('data-oracle-picker', 'true');
+        return true;
+      }
+    }
+    return false;
+  });
+
+  if (tagged) {
+    const loc = page.locator('[data-oracle-picker="true"]').first();
     if (await loc.count() > 0) return loc;
   }
-  // Structural fallback: button with aria-haspopup near the lexical editor
-  const nearEditor = page.locator('[data-lexical-editor]').locator('..').locator('button[aria-haspopup="menu"]').first();
-  if (await nearEditor.count() > 0) return nearEditor;
+
   return null;
 }
 
