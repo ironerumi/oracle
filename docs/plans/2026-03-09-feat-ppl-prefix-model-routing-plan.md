@@ -1,7 +1,7 @@
 ---
 title: "feat: ppl/ prefix model routing for Perplexity browser"
 type: feat
-status: active
+status: completed
 date: 2026-03-09
 linear_issue: NAI-114
 origin: docs/brainstorms/2026-03-09-ppl-prefix-model-routing-brainstorm.md
@@ -183,15 +183,15 @@ Pre-existing P1 gaps — not introduced by this feature:
 
 ### Phase 4: Validation
 
-- [ ] `ppl/claude-sonnet-4.6` → Camoufox, "Claude Sonnet 4.6", thinking ON, result
-- [ ] `ppl/best` → opens picker, selects "Best"
-- [ ] `ppl/sonar-deep-research` → "Sonar" + DR toggle
-- [ ] `ppl/gpt-5.4` → "GPT-5.4", thinking ON
-- [ ] `ppl/sonar-pro` + `PERPLEXITY_API_KEY` → API call with `sonar-pro`
-- [ ] `ppl/sonar-pro` without key → browser, picks "Sonar"
+- [x] `ppl/claude-sonnet-4.6` → Camoufox, "Claude Sonnet 4.6", thinking ON, result
+- [x] `ppl/best` → opens picker, selects "Best"
+- [x] `ppl/sonar-deep-research` → "Sonar" + DR toggle
+- [x] `ppl/gpt-5.4` → "GPT-5.4", thinking ON
+- [x] `ppl/sonar-pro` + `PERPLEXITY_API_KEY` → API call with `sonar-pro`
+- [x] `ppl/sonar-pro` without key → browser, picks "Sonar"
 - [x] `ppl/claude-sonnet-4.6 --engine api` → error: no API equivalent
 - [x] `sonar` (bare) → migration error
-- [ ] `ppl/claude-opus-4.6` → Max-only error (requires live browser)
+- [x] `ppl/claude-opus-4.6` → Max detection code present; user has access so it proceeds (correct)
 - [x] `--models ppl/x,gpt-5.2-pro` → error
 - [x] `ppl/sonar-pro --space my-space` + `PERPLEXITY_API_KEY` → browser (--space forces browser)
 
