@@ -309,3 +309,83 @@ export async function navigateToPerplexity(
 - Cookie write-back creates file even if it didn't exist (auto-bootstrap)
 - `better-sqlite3` native module needed rebuild after Node version change (`npx node-gyp rebuild` in the pnpm module dir)
 - DR progress UI has buttons matching follow-up-suggestions heuristic — must gate on prose existence
+
+## Session Log — 2026-03-09 (Simplify Pass)
+
+### Decisions
+| Decision | Chosen | Rejected | Why |
+|----------|--------|----------|-----|
+| Radix `clickRadix` inside `page.evaluate` | Keep inline (6 lines per closure) | Extract via `page.addInitScript` or string injection | Can't share functions across Node/browser serialization boundary; outer wrappers (`openAddToolsMenu`, `dismissRadixMenu`) capture the real duplication |
+| Stale `browserConfig.test.ts` assertions | Fix tests to expect raw model names | "Fix" code to return `'Sonar'` | Returning `'Sonar'` would break `resolvePerplexityTimeout` (can't distinguish deep-research from regular sonar); architecture intentionally stores raw names per CLAUDE.md |
+| `waitForDocumentReady` after `goto(domcontentloaded)` | Delete — redundant | Keep as safety net | `domcontentloaded` guarantees `readyState >= interactive`; the poll always returns on first iteration — pure wasted IPC |
+| Menu merge for deep-research (social + DR in one open/close) | Defer | Merge into single cycle | Behavioral change with risk (menu state between radio toggle and submenu navigation); saves ~2.1s but needs live testing |
+
+### Files Modified
+- `src/perplexity-browser/actions/radixUtils.ts` — NEW: shared `openAddToolsMenu()`, `dismissRadixMenu()` extracted from deepResearch + sourceFilter
+- `src/perplexity-browser/actions/deepResearch.ts` — use radixUtils; -20 lines
+- `src/perplexity-browser/actions/sourceFilter.ts` — use radixUtils; removed inline `dismissMenu()`; -25 lines
+- `src/perplexity-browser/actions/navigation.ts` — deleted dead `waitForDocumentReady()`; removed redundant call after goto
+- `src/perplexity-browser/actions/spaceNavigation.ts` — removed redundant `waitForDocumentReady` call + unused import
+- `src/perplexity-browser/actions/responseCapture.ts` — use `RESPONSE_PROSE_SELECTOR` constant (was hardcoded); scope link extraction to `[role="tabpanel"]`
+- `src/perplexity-browser/config.ts` — deleted dead `resolvePerplexityModelLabels()`, `resolvePerplexityUrl()`
+- `src/perplexity-browser/constants.ts` — deleted 5 unused exports (TABPANEL_SELECTOR, QUERY_HEADING_SELECTOR, CITATION_SELECTOR, CITATION_NBSP_SELECTOR, ACTIVE_TAB_SELECTOR)
+- `src/perplexity-browser/index.ts` — `browser.on` → `browser.once` for disconnect listener
+- `src/cli/engine.ts` — added shared `isBrowserCompatible()` export
+- `src/cli/runOptions.ts` — import shared `isBrowserCompatible`
+- `bin/oracle-cli.ts` — import shared `isBrowserCompatible`
+- `tests/cli/browserConfig.test.ts` — fixed 4 stale tests: expect raw model name, not `'Sonar'`
+- `tests/perplexity-browser/config.test.ts` — removed tests for deleted `resolvePerplexityModelLabels`
+
+### Session Export
+- Full history: .sessions/260308-1812_2016c849/main.md
+
+### Open / Next
+- **PR creation**: Branch has 6 commits (5 original + simplify). Push and create PR against `main`
+- **Menu merge for sonar-deep-research**: Opening [+] menu twice (social filter + DR activation) wastes ~2.1s of fixed sleeps. Merge into single open/close cycle — needs live browser testing
+- **Replace fixed `setTimeout` with `waitForSelector`**: ~7.5s of hardcoded sleeps in happy path. Replacing 500ms/1000ms waits with observable state checks could halve wall time
+- **`ensureCamoufoxBinary` import path**: `camoufox-js/dist/pkgman.js` is an internal path — may break on version bumps
+
+## Session Log — 2026-03-09 (Cross-Repo Fixes + ABI Compat)
+
+### Decisions
+| Decision | Chosen | Rejected | Why |
+|----------|--------|----------|-----|
+| `better-sqlite3` ABI mismatch fix | Add to `pnpm.onlyBuiltDependencies` in package.json | Homebrew PATH hack / postinstall script | pnpm-native; forces recompile on every `pnpm install` for any Node version — no manual steps |
+| Oracle command syntax in external repos | `oracle --engine browser --model sonar "question"` | `oracle --model sonar` (auto-detect) | API key not working; explicit `--engine browser` is reliable |
+
+### Files Modified
+- `sdx-labor-cost/docs/external-tools.md` — fixed stale `--engine api --models "perplexity/sonar"` → `--engine browser --model sonar`
+- `sdx-shift/.claude/docs/external-tools.md` — same fix + removed stale `npx -y @steipete/oracle` reference
+- `knowledgeBase/.claude/docs/tools.md` — stripped Perplexity model table, simplified to `--engine browser --model sonar`
+- `oracle/.node-version` — NEW: pins Node 24.13.0 for version managers
+
+### Session Export
+- Full history: .sessions/260308-1812_2016c849/main.md
+
+### Open / Next
+- **~~Postinstall rebuild guard~~**: Resolved — added `better-sqlite3` to `pnpm.onlyBuiltDependencies` in package.json
+- **`restartSession` missing Perplexity executor**: `bin/oracle-cli.ts:1512-1533` — restart path only handles Chrome/Gemini, not Camoufox. Perplexity browser restarts silently fall through to ChatGPT runner (warp finding P1)
+- **`--space` not persisted for restart**: `bin/oracle-cli.ts:803-845` — space option not stored in session metadata, dropped on `oracle restart` (warp finding P1)
+- **skills-sprint source script**: `oracle-browser.sh` in the plugin source repo should be kept in sync with cached version at `~/.claude/plugins/cache/ironerumi-tools/ce-slim/0.8.1/scripts/oracle-browser.sh`
+
+## Session Log — 2026-03-09 (Native Module ABI Fix)
+
+### Decisions
+| Decision | Chosen | Rejected | Why |
+|----------|--------|----------|-----|
+| `better-sqlite3` ABI fix strategy | `pnpm.onlyBuiltDependencies` in package.json | Manual rebuild / postinstall script / Homebrew PATH hack | pnpm-native; auto-recompiles on every `pnpm install` for whatever Node is active — zero manual steps, works on any deployment |
+
+### Files Modified
+- `package.json` — added `"better-sqlite3"` to `pnpm.onlyBuiltDependencies` array
+
+### Session Export
+- Full history: .sessions/260309-0710_950fbebc/main.md
+
+### Linear Status
+- N/A
+
+### Open / Next
+- **Verify `pnpm install` triggers rebuild**: Run `pnpm install` in a clean state to confirm `onlyBuiltDependencies` recompiles `better-sqlite3` automatically
+- **`restartSession` missing Perplexity executor**: `bin/oracle-cli.ts:1512-1533` — restart path only handles Chrome/Gemini, not Camoufox (P1 from prior session)
+- **`--space` not persisted for restart**: `bin/oracle-cli.ts:803-845` — space option dropped on `oracle restart` (P1 from prior session)
+- **`ensureCamoufoxBinary` import path**: `camoufox-js/dist/pkgman.js` is internal — may break on version bumps

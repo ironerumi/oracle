@@ -110,6 +110,7 @@
     },
     "onlyBuiltDependencies": [
       "@cdktf/node-pty-prebuilt-multiarch",
+      "better-sqlite3",
       "esbuild"
     ]
   },
