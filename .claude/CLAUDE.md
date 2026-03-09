@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-version_id: 260309.1
+version_id: 260309.2
 
 ## Browser Engine Development
 
@@ -47,6 +47,7 @@ Then use `agent-browser --cdp 9333` to connect. Never use `agent-browser --heade
 - Prompt input: Lexical editor (`div[data-lexical-editor][contenteditable="true"]`), NOT `<textarea>`
 - All aria-labels are locale-dependent (JP: "送信", EN: "Submit"). Use structural selectors.
 - Model picker is a flat cross-provider list (ソナー, Gemini, GPT, Claude, Grok, Kimi), NOT tier-based. All sonar API models map to single "ソナー"/"Sonar" entry.
+- **ppl/ prefix model routing**: All Perplexity models use `ppl/*` namespace (e.g. `ppl/sonar`, `ppl/claude-sonnet-4.6`). Bare `sonar*` removed — throws migration error. Models with `apiModel` use API when `PERPLEXITY_API_KEY` set; others auto-fall to browser.
 - Citation URLs are NOT in inline `span.citation.inline` (those are popover triggers). Real URLs only in "リンク" (Links) tab panel.
 - Space landing page has prompt input directly — no "New thread" click needed.
 
@@ -68,7 +69,7 @@ Then use `agent-browser --cdp 9333` to connect. Never use `agent-browser --heade
 
 ### Architecture
 - Executor pattern: `createXxxExecutor(config) => (runOptions) => Promise<BrowserRunResult>`
-- `isBrowserCompatible()` exists in TWO places: `src/cli/runOptions.ts:60` AND `bin/oracle-cli.ts:1006`. Both must be updated together.
-- Engine resolution: Perplexity uses explicit `'browser'` return when no `PERPLEXITY_API_KEY` (never falls through to OpenAI check)
+- `isBrowserCompatible()` is shared from `src/cli/engine.ts`, imported in `runOptions.ts` and `oracle-cli.ts`. Uses `config.provider === 'perplexity'` for ppl/* models.
+- Engine resolution: ppl/* with `apiModel` + `PERPLEXITY_API_KEY` → API; no `apiModel` → browser; `--engine api` + no `apiModel` → error; `--space` forces browser
 - Perplexity action files accept `Page` (Playwright), ChatGPT action files accept `ChromeClient` (CDP)
-- `browserConfig.desiredModel`: ChatGPT gets browser label (`'GPT-5.2 Pro'`), Perplexity gets raw model name (`'sonar-deep-research'`). Perplexity executor derives the browser label internally via `PERPLEXITY_MODEL_LABELS`.
+- `browserConfig.desiredModel`: ChatGPT gets browser label (`'GPT-5.2 Pro'`), Perplexity gets full `ppl/*` name. Perplexity executor derives the browser label internally via `PERPLEXITY_MODEL_LABELS`.

@@ -150,36 +150,36 @@ Pre-existing P1 gaps — not introduced by this feature:
 
 ### Phase 1: Core Routing
 
-- [ ] Add `ppl/*` entries to `KnownModelName` — `types.ts`
-- [ ] Add `ppl/*` entries to `MODEL_CONFIGS` with `provider: 'perplexity'`, sonar variants with `apiModel` — `config.ts`
-- [ ] Remove bare `sonar*` from `KnownModelName` and `MODEL_CONFIGS`
-- [ ] `resolveEngine()`: perplexity provider logic — has `apiModel` + key → api; no `apiModel` → browser; explicit `--engine api` + no `apiModel` → error — `engine.ts`
-- [ ] `isBrowserCompatible()`: check `config.provider === 'perplexity'` — `engine.ts:49-51`
-- [ ] `isBrowserCompatible()` second site synced — `runOptions.ts:60` / `oracle-cli.ts:1006`
-- [ ] `isPerplexity` in `oracle-cli.ts`: `config.provider === 'perplexity'`
-- [ ] Bare sonar migration error in CLI early path
-- [ ] `--models` + any `ppl/` → error
-- [ ] `normalizeModelOption()`: accept `ppl/` as valid
-- [ ] `inferModelFromLabel()`: recognize `ppl/*` names, don't fall through to GPT aliases — `src/cli/options.ts`
-- [ ] `--space` forces browser for `ppl/*` models (overrides API preference)
+- [x] Add `ppl/*` entries to `KnownModelName` — `types.ts`
+- [x] Add `ppl/*` entries to `MODEL_CONFIGS` with `provider: 'perplexity'`, sonar variants with `apiModel` — `config.ts`
+- [x] Remove bare `sonar*` from `KnownModelName` and `MODEL_CONFIGS`
+- [x] `resolveEngine()`: perplexity provider logic — has `apiModel` + key → api; no `apiModel` → browser; explicit `--engine api` + no `apiModel` → error — `engine.ts`
+- [x] `isBrowserCompatible()`: check `config.provider === 'perplexity'` — `engine.ts:49-51`
+- [x] `isBrowserCompatible()` second site synced — `runOptions.ts:60` / `oracle-cli.ts:1006`
+- [x] `isPerplexity` in `oracle-cli.ts`: `config.provider === 'perplexity'`
+- [x] Bare sonar migration error in CLI early path
+- [x] `--models` + any `ppl/` → error
+- [x] `normalizeModelOption()`: accept `ppl/` as valid
+- [x] `inferModelFromLabel()`: recognize `ppl/*` names, don't fall through to GPT aliases — `src/cli/options.ts`
+- [x] `--space` forces browser for `ppl/*` models (overrides API preference)
 
 ### Phase 2: Model Selection & Thinking Toggle
 
-- [ ] `PERPLEXITY_MODEL_LABELS` keyed by full `ppl/*` names — `constants.ts`
-- [ ] `MODEL_PICKER_SELECTORS` structural fallbacks — `constants.ts`
-- [ ] `MODEL_PICKER_BUTTON_TEXTS` with all model labels — `constants.ts`
-- [ ] Thinking toggle activation in `selectPerplexityModel()` — `modelSelection.ts`
-- [ ] Max-only detection: check `disabled`/`aria-disabled` on menuitemradio → fail fast — `modelSelection.ts`
-- [ ] `ppl/best`: same code path, opens picker, selects "Best" if not active
+- [x] `PERPLEXITY_MODEL_LABELS` keyed by full `ppl/*` names — `constants.ts`
+- [x] `MODEL_PICKER_SELECTORS` structural fallbacks — `constants.ts`
+- [x] `MODEL_PICKER_BUTTON_TEXTS` with all model labels — `constants.ts`
+- [x] Thinking toggle activation in `selectPerplexityModel()` — `modelSelection.ts`
+- [x] Max-only detection: check `disabled`/`aria-disabled` on menuitemradio → fail fast — `modelSelection.ts`
+- [x] `ppl/best`: same code path, opens picker, selects "Best" if not active
 
 ### Phase 3: Config Cleanup
 
-- [ ] `BROWSER_MODEL_LABELS` in `browserConfig.ts`: replace sonar → `ppl/*`
-- [ ] `buildBrowserConfig()`: `isPerplexityModel` via `config.provider`
-- [ ] Executor `index.ts`: default `'ppl/sonar'`, DR check `'ppl/sonar-deep-research'`
-- [ ] `resolvePerplexityTimeout()`: `'ppl/sonar-deep-research'` check
-- [ ] `--space` error message references `ppl/*`
-- [ ] `--model` help text lists `ppl/*` models
+- [x] `BROWSER_MODEL_LABELS` in `browserConfig.ts`: replace sonar → `ppl/*`
+- [x] `buildBrowserConfig()`: `isPerplexityModel` via `config.provider`
+- [x] Executor `index.ts`: default `'ppl/sonar'`, DR check `'ppl/sonar-deep-research'`
+- [x] `resolvePerplexityTimeout()`: `'ppl/sonar-deep-research'` check
+- [x] `--space` error message references `ppl/*`
+- [x] `--model` help text lists `ppl/*` models
 
 ### Phase 4: Validation
 
@@ -189,11 +189,11 @@ Pre-existing P1 gaps — not introduced by this feature:
 - [ ] `ppl/gpt-5.4` → "GPT-5.4", thinking ON
 - [ ] `ppl/sonar-pro` + `PERPLEXITY_API_KEY` → API call with `sonar-pro`
 - [ ] `ppl/sonar-pro` without key → browser, picks "Sonar"
-- [ ] `ppl/claude-sonnet-4.6 --engine api` → error: no API equivalent
-- [ ] `sonar` (bare) → migration error
-- [ ] `ppl/claude-opus-4.6` → Max-only error
-- [ ] `--models ppl/x,gpt-5.2-pro` → error
-- [ ] `ppl/sonar-pro --space my-space` + `PERPLEXITY_API_KEY` → browser (--space forces browser)
+- [x] `ppl/claude-sonnet-4.6 --engine api` → error: no API equivalent
+- [x] `sonar` (bare) → migration error
+- [ ] `ppl/claude-opus-4.6` → Max-only error (requires live browser)
+- [x] `--models ppl/x,gpt-5.2-pro` → error
+- [x] `ppl/sonar-pro --space my-space` + `PERPLEXITY_API_KEY` → browser (--space forces browser)
 
 ## File Change Map
 
