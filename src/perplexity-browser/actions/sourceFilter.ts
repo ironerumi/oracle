@@ -28,7 +28,8 @@ export async function enableSocialSource(
 
   // Step 2: Click "Connectors & Sources" submenu (pointer events for Radix)
   const subResult = await page.evaluate((texts: string[]) => {
-    const clickRadix = (el: HTMLElement) => {
+    // Use function expression (not const =>) to avoid esbuild __name() decoration leaking into page context
+    function clickRadix(el: HTMLElement) {
       const rect = el.getBoundingClientRect();
       const evt = { bubbles: true, cancelable: true, clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2 };
       el.dispatchEvent(new PointerEvent('pointerdown', evt));
@@ -36,7 +37,7 @@ export async function enableSocialSource(
       el.dispatchEvent(new PointerEvent('pointerup', evt));
       el.dispatchEvent(new MouseEvent('mouseup', evt));
       el.dispatchEvent(new MouseEvent('click', evt));
-    };
+    }
     // Try [role="menuitem"] first
     for (const item of document.querySelectorAll('[role="menuitem"]')) {
       const text = item.textContent?.trim() ?? '';
@@ -71,7 +72,7 @@ export async function enableSocialSource(
 
   // Step 3: Find Social toggle — by icon or text (pointer events for Radix)
   const toggleResult = await page.evaluate((args: { iconId: string; texts: string[] }) => {
-    const clickRadix = (el: HTMLElement) => {
+    function clickRadix(el: HTMLElement) {
       const rect = el.getBoundingClientRect();
       const evt = { bubbles: true, cancelable: true, clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2 };
       el.dispatchEvent(new PointerEvent('pointerdown', evt));
@@ -79,7 +80,7 @@ export async function enableSocialSource(
       el.dispatchEvent(new PointerEvent('pointerup', evt));
       el.dispatchEvent(new MouseEvent('mouseup', evt));
       el.dispatchEvent(new MouseEvent('click', evt));
-    };
+    }
 
     // Strategy 1: SVG icon match on [role="menuitemcheckbox"]
     for (const u of document.querySelectorAll('[role="menuitemcheckbox"] use')) {

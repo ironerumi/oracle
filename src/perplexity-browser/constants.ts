@@ -26,9 +26,9 @@ export const SUBMIT_BUTTON_SELECTORS = [
 // Button adjacent to the prompt input that opens a model selection dropdown.
 // The button label is dynamic (shows selected model name), so prefer structural selectors.
 export const MODEL_PICKER_SELECTORS = [
-  'button[aria-haspopup="menu"][aria-label]',
   'button[aria-label="Select model"]',
   'button[aria-label="モデルを選択"]',
+  'button[aria-label="Model"]',
 ];
 
 // --- Sources/Links tab ---
@@ -100,7 +100,7 @@ export const PERPLEXITY_THINKING_MODELS: Record<string, boolean> = {
 export const MODEL_PICKER_BUTTON_TEXTS = [
   'Sonar', 'ソナー', 'Best', 'ベスト',
   'GPT-5.4', 'Gemini 3.1 Pro', 'Claude Sonnet 4.6', 'Claude Opus 4.6', 'Kimi K2.5',
-  'Select model', 'モデルを選択',
+  'Select model', 'モデルを選択', 'Model',
 ];
 
 // --- Source filters (connectors & sources submenu) ---

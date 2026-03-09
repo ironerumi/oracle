@@ -101,6 +101,11 @@ export function createPerplexityBrowserExecutor(
         log('[perplexity-browser] Warning: no cookies applied. Provide --browser-inline-cookies-file with Perplexity cookies.');
       }
 
+      // Inject __name shim — esbuild/tsx decorates function declarations with __name() which
+      // leaks into page.evaluate() calls and fails because __name doesn't exist in browser context.
+      // addInitScript survives navigations.
+      await context.addInitScript(() => { (window as any).__name = (fn: any) => fn; });
+
       // Navigate to Perplexity home
       await race(navigateToPerplexity(page, PERPLEXITY_URL, log));
 

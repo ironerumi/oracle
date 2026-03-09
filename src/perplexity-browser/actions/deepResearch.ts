@@ -47,7 +47,7 @@ export async function activateDeepResearch(
   // Step 2: Find and click the Deep Research item (pointer events for Radix)
   const toggleResult = await page.evaluate(
     (args: { drIconId: string; drTexts: string[] }) => {
-      const clickRadix = (el: HTMLElement) => {
+      function clickRadix(el: HTMLElement) {
         const rect = el.getBoundingClientRect();
         const evt = { bubbles: true, cancelable: true, clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2 };
         el.dispatchEvent(new PointerEvent('pointerdown', evt));
@@ -55,7 +55,7 @@ export async function activateDeepResearch(
         el.dispatchEvent(new PointerEvent('pointerup', evt));
         el.dispatchEvent(new MouseEvent('mouseup', evt));
         el.dispatchEvent(new MouseEvent('click', evt));
-      };
+      }
 
       // Strategy 1: SVG icon match on [role="menuitemradio"]
       for (const u of document.querySelectorAll('[role="menuitemradio"] use')) {

@@ -18,6 +18,9 @@ import {
  *
  * This means: for any sonar model, we verify "Sonar" is the current selection and skip.
  * The model picker button shows the CURRENT model name as its label.
+ *
+ * IMPORTANT: Radix UI menus require real pointer events — plain element.click() from
+ * page.evaluate() does NOT open dropdowns. Use Playwright's locator.click() instead.
  */
 export async function selectPerplexityModel(
   page: Page,
@@ -36,34 +39,9 @@ export async function selectPerplexityModel(
     return;
   }
 
-  // Check if the current model already matches by reading the picker button text
-  const check = await page.evaluate(
-    (args: { pickerSelectors: string[]; pickerBtnTexts: string[]; targetLabels: string[] }) => {
-      let pickerBtn: Element | null = null;
-      for (const sel of args.pickerSelectors) {
-        pickerBtn = document.querySelector(sel);
-        if (pickerBtn) break;
-      }
-      if (!pickerBtn) {
-        const allBtns = document.querySelectorAll('button');
-        for (const btn of allBtns) {
-          const text = btn.textContent?.trim() ?? '';
-          if (args.pickerBtnTexts.some(t => text === t)) {
-            pickerBtn = btn;
-            break;
-          }
-        }
-      }
-      if (!pickerBtn) return { found: false };
-
-      const currentText = pickerBtn.textContent?.trim() ?? '';
-      const alreadySelected = args.targetLabels.some(t => currentText.includes(t));
-      return { found: true, currentText, alreadySelected };
-    },
-    { pickerSelectors: MODEL_PICKER_SELECTORS, pickerBtnTexts: MODEL_PICKER_BUTTON_TEXTS, targetLabels: labels },
-  );
-
-  if (!check?.found) {
+  // Find the picker button
+  const pickerBtn = await findPickerButton(page);
+  if (!pickerBtn) {
     if (model === 'ppl/sonar' || model.startsWith('ppl/sonar')) {
       log?.('[perplexity-browser] Model picker button not found, but sonar is the default. Continuing.');
       return;
@@ -74,120 +52,117 @@ export async function selectPerplexityModel(
     );
   }
 
-  if (check.alreadySelected) {
-    log?.(`[perplexity-browser] Model already set to "${check.currentText}" — matches ${model}`);
-    // Still need to activate thinking if required (picker might not be open, so skip toggle here)
+  // Check if the current model already matches
+  const currentText = (await pickerBtn.textContent())?.trim() ?? '';
+  const alreadySelected = labels.some(t => currentText.includes(t));
+
+  if (alreadySelected) {
+    log?.(`[perplexity-browser] Model already set to "${currentText}" — matches ${model}`);
     return;
   }
 
   // Need to open picker and select
-  log?.(`[perplexity-browser] Current model is "${check.currentText}", need to switch to ${model}`);
+  log?.(`[perplexity-browser] Current model is "${currentText}", need to switch to ${model}`);
 
-  const result = await page.evaluate(
-    async (args: { pickerSelectors: string[]; pickerBtnTexts: string[]; targetLabels: string[]; checkMaxDisabled: boolean }) => {
-      let pickerBtn: Element | null = null;
-      for (const sel of args.pickerSelectors) {
-        pickerBtn = document.querySelector(sel);
-        if (pickerBtn) break;
-      }
-      if (!pickerBtn) {
-        const allBtns = document.querySelectorAll('button');
-        for (const btn of allBtns) {
-          const text = btn.textContent?.trim() ?? '';
-          if (args.pickerBtnTexts.some(t => text === t)) { pickerBtn = btn; break; }
-        }
-      }
-      if (!pickerBtn) return { status: 'picker-not-found' as const };
+  // Open picker with Playwright click (dispatches proper pointer events for Radix)
+  await pickerBtn.click();
+  await page.waitForTimeout(600);
 
-      (pickerBtn as HTMLElement).click();
-      await new Promise(r => setTimeout(r, 600));
+  // Find the target model in the dropdown
+  const menuItems = page.locator('[role="menuitem"], [role="option"], [role="menuitemradio"], [role="listbox"] button, [data-radix-collection-root] button');
+  const count = await menuItems.count();
 
-      const candidates = document.querySelectorAll('[role="menuitem"], [role="option"], [role="menuitemradio"], [role="listbox"] button, [data-radix-collection-root] button');
-      let matched: Element | null = null;
-      for (const item of candidates) {
-        const text = item.textContent?.trim() ?? '';
-        if (args.targetLabels.some(t => text.includes(t))) {
-          matched = item;
-          break;
-        }
-      }
-      if (!matched) {
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-        const available = Array.from(candidates).slice(0, 15).map(el => el.textContent?.trim()).filter(Boolean);
-        return { status: 'label-not-found' as const, available };
-      }
-
-      // Max-only detection: check disabled/aria-disabled attributes
-      if (args.checkMaxDisabled) {
-        const el = matched as HTMLElement;
-        if (el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true' || el.dataset.disabled != null) {
-          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-          return { status: 'max-only' as const };
-        }
-      }
-
-      (matched as HTMLElement).click();
-      await new Promise(r => setTimeout(r, 300));
-
-      // Thinking toggle: check for menuitemcheckbox with inner switch
-      let thinkingToggled: boolean | null = null;
-      const checkbox = document.querySelector('[role="menuitemcheckbox"]');
-      if (checkbox) {
-        const sw = checkbox.querySelector('button[role="switch"]');
-        if (sw) {
-          const checked = sw.getAttribute('aria-checked');
-          if (checked === 'false') {
-            (sw as HTMLElement).click();
-            await new Promise(r => setTimeout(r, 200));
-            thinkingToggled = true;
-          } else {
-            thinkingToggled = false; // already on
-          }
-        }
-      }
-
-      return { status: 'selected' as const, text: matched.textContent?.trim(), thinkingToggled };
-    },
-    {
-      pickerSelectors: MODEL_PICKER_SELECTORS,
-      pickerBtnTexts: MODEL_PICKER_BUTTON_TEXTS,
-      targetLabels: labels,
-      checkMaxDisabled: model === 'ppl/claude-opus-4.6',
-    },
-  );
-
-  if (result?.status === 'max-only') {
-    throw new BrowserAutomationError(
-      'ppl/claude-opus-4.6 requires Perplexity Max subscription.',
-      { stage: 'model-selection' },
-    );
-  }
-  if (result?.status === 'selected') {
-    log?.(`[perplexity-browser] Model switched to: ${result.text}`);
-    if (model in PERPLEXITY_THINKING_MODELS) {
-      if (result.thinkingToggled === true) {
-        log?.('[perplexity-browser] Thinking toggle activated');
-      } else if (result.thinkingToggled === false) {
-        log?.('[perplexity-browser] Thinking toggle already ON');
-      } else {
-        log?.('[perplexity-browser] Thinking toggle not found in picker (may not be available)');
-      }
+  let matchedIndex = -1;
+  for (let i = 0; i < count; i++) {
+    const text = (await menuItems.nth(i).textContent())?.trim() ?? '';
+    if (labels.some(t => text.includes(t))) {
+      matchedIndex = i;
+      break;
     }
-  } else if (result?.status === 'label-not-found') {
+  }
+
+  if (matchedIndex === -1) {
+    // Dismiss picker
+    await page.keyboard.press('Escape');
+    const available: string[] = [];
+    for (let i = 0; i < Math.min(count, 15); i++) {
+      const text = (await menuItems.nth(i).textContent())?.trim();
+      if (text) available.push(text);
+    }
     throw new BrowserAutomationError(
       `Could not find model matching ${JSON.stringify(labels)} in picker. ` +
-        `Available: ${((result as { available?: string[] }).available ?? []).join(', ') || '(none)'}. ` +
+        `Available: ${available.join(', ') || '(none)'}. ` +
         'Update PERPLEXITY_MODEL_LABELS in constants.ts.',
       { stage: 'model-selection' },
     );
-  } else {
-    if (model === 'ppl/sonar' || model.startsWith('ppl/sonar')) {
-      log?.('[perplexity-browser] Could not switch model but sonar is default. Continuing.');
-      return;
-    }
-    throw new BrowserAutomationError(
-      'Failed to open model picker or select model.',
-      { stage: 'model-selection' },
-    );
   }
+
+  const matched = menuItems.nth(matchedIndex);
+
+  // Max-only detection: check disabled/aria-disabled attributes
+  if (model === 'ppl/claude-opus-4.6') {
+    const disabled = await matched.evaluate(el => {
+      const he = el as HTMLElement;
+      return he.hasAttribute('disabled') || he.getAttribute('aria-disabled') === 'true' || he.dataset.disabled != null;
+    });
+    if (disabled) {
+      await page.keyboard.press('Escape');
+      throw new BrowserAutomationError(
+        'ppl/claude-opus-4.6 requires Perplexity Max subscription.',
+        { stage: 'model-selection' },
+      );
+    }
+  }
+
+  // Click the model item (Playwright click for proper events)
+  await matched.click();
+  await page.waitForTimeout(300);
+
+  const selectedText = (await matched.textContent())?.trim();
+  log?.(`[perplexity-browser] Model switched to: ${selectedText}`);
+
+  // Thinking toggle: check for menuitemcheckbox with inner switch
+  if (model in PERPLEXITY_THINKING_MODELS) {
+    const thinkingResult = await activateThinkingToggle(page, log);
+    if (thinkingResult === 'activated') {
+      log?.('[perplexity-browser] Thinking toggle activated');
+    } else if (thinkingResult === 'already-on') {
+      log?.('[perplexity-browser] Thinking toggle already ON');
+    } else {
+      log?.('[perplexity-browser] Thinking toggle not found in picker (may not be available)');
+    }
+  }
+}
+
+async function findPickerButton(page: Page) {
+  // Try aria-label selectors first
+  for (const sel of MODEL_PICKER_SELECTORS) {
+    const loc = page.locator(sel).first();
+    if (await loc.count() > 0) return loc;
+  }
+  // Fallback: find button by exact text matching MODEL_PICKER_BUTTON_TEXTS
+  for (const text of MODEL_PICKER_BUTTON_TEXTS) {
+    const loc = page.locator(`button:text-is("${text}")`).first();
+    if (await loc.count() > 0) return loc;
+  }
+  // Structural fallback: button with aria-haspopup near the lexical editor
+  const nearEditor = page.locator('[data-lexical-editor]').locator('..').locator('button[aria-haspopup="menu"]').first();
+  if (await nearEditor.count() > 0) return nearEditor;
+  return null;
+}
+
+async function activateThinkingToggle(page: Page, log?: BrowserLogger): Promise<'activated' | 'already-on' | 'not-found'> {
+  const checkbox = page.locator('[role="menuitemcheckbox"]').first();
+  if (await checkbox.count() === 0) return 'not-found';
+
+  const sw = checkbox.locator('button[role="switch"]').first();
+  if (await sw.count() === 0) return 'not-found';
+
+  const checked = await sw.getAttribute('aria-checked');
+  if (checked === 'false') {
+    await sw.click();
+    await page.waitForTimeout(200);
+    return 'activated';
+  }
+  return 'already-on';
 }
