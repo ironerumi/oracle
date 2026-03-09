@@ -24,8 +24,9 @@ export const SUBMIT_BUTTON_SELECTORS = [
 
 // --- Model picker ---
 // Button adjacent to the prompt input that opens a model selection dropdown.
-// The button label shows the current model name (e.g. "ソナー"), not a static aria-label.
+// The button label is dynamic (shows selected model name), so prefer structural selectors.
 export const MODEL_PICKER_SELECTORS = [
+  'button[aria-haspopup="menu"][aria-label]',
   'button[aria-label="Select model"]',
   'button[aria-label="モデルを選択"]',
 ];
@@ -72,15 +73,35 @@ export function buildSpaceUrl(slug: string): string {
 // The picker label is locale-dependent (JP: "ソナー", EN: "Sonar").
 export const PERPLEXITY_MODEL_LABELS: Record<string, string[]> = {
   // sonar variants all map to the same picker entry
-  sonar: ['Sonar', 'ソナー'],
-  'sonar-pro': ['Sonar', 'ソナー'],
-  'sonar-reasoning-pro': ['Sonar', 'ソナー'],
-  'sonar-deep-research': ['Sonar', 'ソナー'],
+  'ppl/sonar': ['Sonar', 'ソナー'],
+  'ppl/sonar-pro': ['Sonar', 'ソナー'],
+  'ppl/sonar-reasoning-pro': ['Sonar', 'ソナー'],
+  'ppl/sonar-deep-research': ['Sonar', 'ソナー'],
+  'ppl/best': ['Best', 'ベスト'],
+  'ppl/gpt-5.4': ['GPT-5.4'],
+  'ppl/gemini-3.1-pro': ['Gemini 3.1 Pro'],
+  'ppl/claude-sonnet-4.6': ['Claude Sonnet 4.6'],
+  'ppl/claude-opus-4.6': ['Claude Opus 4.6'],
+  'ppl/kimi-k2.5': ['Kimi K2.5'],
+};
+
+// Thinking toggle: models that support extended thinking in the Perplexity UI.
+// Value = default state (true = ON by default, false = OFF by default).
+export const PERPLEXITY_THINKING_MODELS: Record<string, boolean> = {
+  'ppl/gpt-5.4': false,
+  'ppl/gemini-3.1-pro': true,
+  'ppl/claude-sonnet-4.6': false,
+  'ppl/claude-opus-4.6': false,
+  'ppl/kimi-k2.5': true,
 };
 
 // The model picker button label shows the CURRENT model name, not a static label.
 // On first load with default model, it shows "ソナー" / "Sonar".
-export const MODEL_PICKER_BUTTON_TEXTS = ['Sonar', 'ソナー', 'Select model', 'モデルを選択'];
+export const MODEL_PICKER_BUTTON_TEXTS = [
+  'Sonar', 'ソナー', 'Best', 'ベスト',
+  'GPT-5.4', 'Gemini 3.1 Pro', 'Claude Sonnet 4.6', 'Claude Opus 4.6', 'Kimi K2.5',
+  'Select model', 'モデルを選択',
+];
 
 // --- Source filters (connectors & sources submenu) ---
 // Access path: "ファイルまたはツールを追加する" button → "コネクタとソース" menuitem → checkboxes
