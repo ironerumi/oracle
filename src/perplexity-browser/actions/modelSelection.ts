@@ -68,58 +68,56 @@ export async function selectPerplexityModel(
   await pickerBtn.click();
   await page.waitForTimeout(600);
 
-  // Find the target model in the dropdown
-  const menuItems = page.locator('[role="menuitem"], [role="option"], [role="menuitemradio"], [role="listbox"] button, [data-radix-collection-root] button');
-  const count = await menuItems.count();
+  // Scan all menu items in a single evaluate (avoids per-item Playwright timeouts)
+  const scanResult = await page.evaluate(
+    (args: { targetLabels: string[]; checkMaxDisabled: boolean }) => {
+      const sel = '[role="menuitem"], [role="option"], [role="menuitemradio"], [role="listbox"] button, [data-radix-collection-root] button';
+      const candidates = document.querySelectorAll(sel);
+      const available: string[] = [];
+      let matchIndex = -1;
+      let matchDisabled = false;
 
-  let matchedIndex = -1;
-  for (let i = 0; i < count; i++) {
-    const text = (await menuItems.nth(i).textContent())?.trim() ?? '';
-    if (labels.some(t => text.includes(t))) {
-      matchedIndex = i;
-      break;
-    }
-  }
+      for (let i = 0; i < candidates.length; i++) {
+        const text = candidates[i].textContent?.trim() ?? '';
+        if (text) available.push(text);
+        if (matchIndex === -1 && args.targetLabels.some(t => text.includes(t))) {
+          matchIndex = i;
+          if (args.checkMaxDisabled) {
+            const el = candidates[i] as HTMLElement;
+            matchDisabled = el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true' || el.dataset?.disabled != null;
+          }
+        }
+      }
+      return { matchIndex, matchDisabled, available: available.slice(0, 15) };
+    },
+    { targetLabels: labels, checkMaxDisabled: model === 'ppl/claude-opus-4.6' },
+  );
 
-  if (matchedIndex === -1) {
-    // Dismiss picker
+  if (scanResult.matchIndex === -1) {
     await page.keyboard.press('Escape');
-    const available: string[] = [];
-    for (let i = 0; i < Math.min(count, 15); i++) {
-      const text = (await menuItems.nth(i).textContent())?.trim();
-      if (text) available.push(text);
-    }
     throw new BrowserAutomationError(
       `Could not find model matching ${JSON.stringify(labels)} in picker. ` +
-        `Available: ${available.join(', ') || '(none)'}. ` +
+        `Available: ${scanResult.available.join(', ') || '(none)'}. ` +
         'Update PERPLEXITY_MODEL_LABELS in constants.ts.',
       { stage: 'model-selection' },
     );
   }
 
-  const matched = menuItems.nth(matchedIndex);
-
-  // Max-only detection: check disabled/aria-disabled attributes
-  if (model === 'ppl/claude-opus-4.6') {
-    const disabled = await matched.evaluate(el => {
-      const he = el as HTMLElement;
-      return he.hasAttribute('disabled') || he.getAttribute('aria-disabled') === 'true' || he.dataset.disabled != null;
-    });
-    if (disabled) {
-      await page.keyboard.press('Escape');
-      throw new BrowserAutomationError(
-        'ppl/claude-opus-4.6 requires Perplexity Max subscription.',
-        { stage: 'model-selection' },
-      );
-    }
+  if (scanResult.matchDisabled) {
+    await page.keyboard.press('Escape');
+    throw new BrowserAutomationError(
+      'ppl/claude-opus-4.6 requires Perplexity Max subscription.',
+      { stage: 'model-selection' },
+    );
   }
 
-  // Click the model item (Playwright click for proper events)
-  await matched.click();
+  // Click the matched item via Playwright locator (proper pointer events)
+  const menuItems = page.locator('[role="menuitem"], [role="option"], [role="menuitemradio"], [role="listbox"] button, [data-radix-collection-root] button');
+  const matched = menuItems.nth(scanResult.matchIndex);
+  await matched.click({ timeout: 5000 });
   await page.waitForTimeout(300);
 
-  const selectedText = (await matched.textContent())?.trim();
-  log?.(`[perplexity-browser] Model switched to: ${selectedText}`);
+  log?.(`[perplexity-browser] Model switched to: ${scanResult.available[scanResult.matchIndex] ?? 'unknown'}`);
 
   // Thinking toggle: check for menuitemcheckbox with inner switch
   if (model in PERPLEXITY_THINKING_MODELS) {
