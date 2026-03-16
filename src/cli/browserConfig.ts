@@ -146,7 +146,7 @@ export async function buildBrowserConfig(
   const desiredModel = isChatGptModel
     ? mapModelToBrowserLabel(options.model)
     : isPplModel
-      ? baseModel                               // raw model name: Perplexity executor derives browser label internally
+      ? baseModel // raw model name: Perplexity executor derives browser label internally
       : shouldUseOverride
         ? desiredModelOverride
         : mapModelToBrowserLabel(options.model);

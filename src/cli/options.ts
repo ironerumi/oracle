@@ -200,7 +200,9 @@ const REMOVED_SONAR = ["sonar", "sonar-pro", "sonar-reasoning-pro", "sonar-deep-
 export function resolveApiModel(modelValue: string): ModelName {
   const normalized = normalizeModelOption(modelValue).toLowerCase();
   if (REMOVED_SONAR.includes(normalized)) {
-    throw new Error(`Model '${normalized}' moved to 'ppl/${normalized}'. Update your --model flag.`);
+    throw new Error(
+      `Model '${normalized}' moved to 'ppl/${normalized}'. Update your --model flag.`,
+    );
   }
   if (normalized in MODEL_CONFIGS) {
     return normalized as ModelName;
@@ -273,7 +275,9 @@ export function inferModelFromLabel(modelValue: string): ModelName {
     return DEFAULT_MODEL;
   }
   if (REMOVED_SONAR.includes(normalized)) {
-    throw new Error(`Model '${normalized}' moved to 'ppl/${normalized}'. Update your --model flag.`);
+    throw new Error(
+      `Model '${normalized}' moved to 'ppl/${normalized}'. Update your --model flag.`,
+    );
   }
   if (normalized in MODEL_CONFIGS) {
     return normalized as ModelName;

@@ -42,7 +42,12 @@ export function resolveRunOptionsFromConfig({
 }: ResolveRunOptionsInput): ResolvedRunOptions {
   // Resolve model early so engine can consider provider-specific keys (e.g., PERPLEXITY_API_KEY)
   const cliModelArg = normalizeModelOption(model ?? userConfig?.model) || DEFAULT_MODEL;
-  const resolvedEngine = resolveEngineWithConfig({ engine, configEngine: userConfig?.engine, env, model: cliModelArg });
+  const resolvedEngine = resolveEngineWithConfig({
+    engine,
+    configEngine: userConfig?.engine,
+    env,
+    model: cliModelArg,
+  });
   const browserRequested = engine === "browser";
   const browserConfigured = userConfig?.engine === "browser";
   const requestedModelList = Array.isArray(models) ? models : [];
@@ -104,7 +109,13 @@ export function resolveRunOptionsFromConfig({
   const isPerplexity = isPerplexityModel(resolvedModel);
   const baseUrl = normalizeBaseUrl(
     userConfig?.apiBaseUrl ??
-      (isPerplexity ? undefined : isClaude ? env.ANTHROPIC_BASE_URL : isGrok ? env.XAI_BASE_URL : env.OPENAI_BASE_URL),
+      (isPerplexity
+        ? undefined
+        : isClaude
+          ? env.ANTHROPIC_BASE_URL
+          : isGrok
+            ? env.XAI_BASE_URL
+            : env.OPENAI_BASE_URL),
   );
   const uniqueMultiModels: ModelName[] = normalizedRequestedModels.length > 0 ? allModels : [];
   const includesCodexMultiModel = uniqueMultiModels.some((entry) =>

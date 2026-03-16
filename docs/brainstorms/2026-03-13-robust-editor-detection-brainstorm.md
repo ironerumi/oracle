@@ -42,12 +42,14 @@ Fix the Perplexity browser engine failing with "Could not find the Perplexity pr
 ## Scope
 
 ### In scope
+
 - Cookie expiry filtering in Perplexity executor (`index.ts`)
 - "Internal Error" page detection + cookie-less retry in navigation flow
 - Better error messages in `promptSubmit.ts` and `navigation.ts`
 - Add `#ask-input` to `PROMPT_SELECTORS` in `constants.ts`
 
 ### Out of scope
+
 - Scored element fallback (selectors are fine; defer to future)
 - Cookie re-export automation
 - Other engines (ChatGPT/Gemini)

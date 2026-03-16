@@ -19,18 +19,19 @@ A `ppl/` model name prefix (OpenRouter-style) that routes any model through Perp
 
 ## Model Registry (verified live 2026-03-09)
 
-| `ppl/` model name | Perplexity UI label | Notes |
-|---|---|---|
-| `ppl/best` | "Best" | Default. "Selects your best available models" |
-| `ppl/sonar` | "Sonar" | |
-| `ppl/sonar-deep-research` | "Sonar" + Deep Research toggle | Separate toggle, not model picker |
-| `ppl/gpt-5.4` | "GPT-5.4" | Marked "New" in UI |
-| `ppl/gemini-3.1-pro` | "Gemini 3.1 Pro" | |
-| `ppl/claude-sonnet-4.6` | "Claude Sonnet 4.6" | |
-| `ppl/claude-opus-4.6` | "Claude Opus 4.6" | **Max-only** — fail fast with clear error for non-Max users |
-| `ppl/kimi-k2.5` | "Kimi K2.5" | "Hosted in the US" |
+| `ppl/` model name         | Perplexity UI label            | Notes                                                       |
+| ------------------------- | ------------------------------ | ----------------------------------------------------------- |
+| `ppl/best`                | "Best"                         | Default. "Selects your best available models"               |
+| `ppl/sonar`               | "Sonar"                        |                                                             |
+| `ppl/sonar-deep-research` | "Sonar" + Deep Research toggle | Separate toggle, not model picker                           |
+| `ppl/gpt-5.4`             | "GPT-5.4"                      | Marked "New" in UI                                          |
+| `ppl/gemini-3.1-pro`      | "Gemini 3.1 Pro"               |                                                             |
+| `ppl/claude-sonnet-4.6`   | "Claude Sonnet 4.6"            |                                                             |
+| `ppl/claude-opus-4.6`     | "Claude Opus 4.6"              | **Max-only** — fail fast with clear error for non-Max users |
+| `ppl/kimi-k2.5`           | "Kimi K2.5"                    | "Hosted in the US"                                          |
 
 ### Dropped sonar tiers
+
 `sonar-pro` and `sonar-reasoning-pro` are API-only distinctions. The browser UI has a single "Sonar" entry, so these don't get `ppl/` equivalents.
 
 ## Thinking Toggle (verified live 2026-03-09)
@@ -38,21 +39,22 @@ A `ppl/` model name prefix (OpenRouter-style) that routes any model through Perp
 All models except Sonar and Best have a "Thinking" toggle in the model picker dropdown.
 
 **DOM structure:**
+
 - `[role="menuitemcheckbox"]` with text "Thinking" — sibling of the selected `menuitemradio`
 - Contains `button[role="switch"][aria-checked][data-state]`
 - State: `aria-checked="true"` / `data-state="checked"` = ON
 
 **Per-model default state (Perplexity's default, before we touch it):**
 
-| Model | Thinking toggle exists | Perplexity default |
-|---|---|---|
-| Best | No | N/A |
-| Sonar | No | N/A |
-| GPT-5.4 | Yes | OFF |
-| Gemini 3.1 Pro | Yes | ON |
-| Claude Sonnet 4.6 | Yes | OFF |
-| Claude Opus 4.6 | Yes (assumed) | Unknown (Max-only) |
-| Kimi K2.5 | Yes | ON |
+| Model             | Thinking toggle exists | Perplexity default |
+| ----------------- | ---------------------- | ------------------ |
+| Best              | No                     | N/A                |
+| Sonar             | No                     | N/A                |
+| GPT-5.4           | Yes                    | OFF                |
+| Gemini 3.1 Pro    | Yes                    | ON                 |
+| Claude Sonnet 4.6 | Yes                    | OFF                |
+| Claude Opus 4.6   | Yes (assumed)          | Unknown (Max-only) |
+| Kimi K2.5         | Yes                    | ON                 |
 
 **Oracle behavior:** Always ensure thinking is ON. After selecting a model, check the switch. If off → click to enable. If already on → no-op. If no toggle exists (Sonar, Best) → skip.
 

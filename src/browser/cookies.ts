@@ -20,7 +20,14 @@ export async function syncCookies(
     extraOrigins?: string[];
   } = {},
 ) {
-  const { allowErrors = false, filterNames, inlineCookies, cookiePath, waitMs = 0, extraOrigins } = options;
+  const {
+    allowErrors = false,
+    filterNames,
+    inlineCookies,
+    cookiePath,
+    waitMs = 0,
+    extraOrigins,
+  } = options;
   try {
     // Learned: inline cookies are the most deterministic (avoid Keychain + profile ambiguity).
     const cookies = inlineCookies?.length

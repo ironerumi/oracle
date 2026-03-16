@@ -246,15 +246,17 @@ describe("resolveRunOptionsFromConfig", () => {
     expect(runOptions.baseUrl).toBe("https://api.example/v1");
   });
 
-  it('does not inherit OPENAI_BASE_URL for Perplexity models', () => {
+  it("does not inherit OPENAI_BASE_URL for Perplexity models", () => {
     // biome-ignore lint/style/useNamingConvention: env var is uppercase by convention
-    const env: NodeJS.ProcessEnv = { OPENAI_BASE_URL: 'https://openai.example/v1' } as NodeJS.ProcessEnv;
+    const env: NodeJS.ProcessEnv = {
+      OPENAI_BASE_URL: "https://openai.example/v1",
+    } as NodeJS.ProcessEnv;
     const { runOptions } = resolveRunOptionsFromConfig({
       prompt: basePrompt,
-      model: 'ppl/sonar',
+      model: "ppl/sonar",
       env,
     });
-    expect(runOptions.model).toBe('ppl/sonar');
+    expect(runOptions.model).toBe("ppl/sonar");
     // baseUrl should be undefined (not inherited from OPENAI_BASE_URL)
     // run.ts fills from PERPLEXITY_BASE_URL later
     expect(runOptions.baseUrl).toBeUndefined();

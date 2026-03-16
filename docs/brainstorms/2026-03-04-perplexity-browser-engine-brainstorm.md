@@ -23,13 +23,13 @@ A browser engine for Perplexity that automates `perplexity.ai` via Chrome DevToo
 
 ### Trade-offs
 
-| Factor | CDP (chosen) | Reverse-engineer |
-|--------|-------------|-----------------|
-| Speed | Slower (needs Chrome) | Faster (HTTP only) |
-| Reliability | Fragile to UI changes | Fragile to API changes |
-| Feature access | Full UI access | Limited to discovered endpoints |
-| Dependencies | Chrome required | None beyond fetch |
-| Debugging | Visual (can watch browser) | Opaque |
+| Factor         | CDP (chosen)               | Reverse-engineer                |
+| -------------- | -------------------------- | ------------------------------- |
+| Speed          | Slower (needs Chrome)      | Faster (HTTP only)              |
+| Reliability    | Fragile to UI changes      | Fragile to API changes          |
+| Feature access | Full UI access             | Limited to discovered endpoints |
+| Dependencies   | Chrome required            | None beyond fetch               |
+| Debugging      | Visual (can watch browser) | Opaque                          |
 
 CDP wins on feature access (Spaces, model picker) and debuggability. Speed is acceptable for oracle's use case (one-shot queries, not high-throughput).
 
@@ -68,14 +68,14 @@ src/perplexity-browser/
 
 ### Model label mapping (TBD -- needs UI inspection)
 
-| API Model | Expected Web UI Label |
-|-----------|----------------------|
-| sonar | Default / Quick Search |
-| sonar-pro | Pro Search |
-| sonar-reasoning-pro | Reasoning |
-| sonar-deep-research | Deep Research |
+| API Model           | Expected Web UI Label  |
+| ------------------- | ---------------------- |
+| sonar               | Default / Quick Search |
+| sonar-pro           | Pro Search             |
+| sonar-reasoning-pro | Reasoning              |
+| sonar-deep-research | Deep Research          |
 
-*Exact labels need to be confirmed by inspecting the Perplexity web UI.*
+_Exact labels need to be confirmed by inspecting the Perplexity web UI._
 
 ## Resolved Questions
 

@@ -104,7 +104,7 @@ export async function runOracle(
       baseUrl = resolvedXaiBaseUrl;
     } else if (provider === "anthropic") {
       baseUrl = process.env.ANTHROPIC_BASE_URL?.trim();
-    } else if (provider === 'perplexity') {
+    } else if (provider === "perplexity") {
       baseUrl = process.env.PERPLEXITY_BASE_URL?.trim();
     } else {
       baseUrl = process.env.OPENAI_BASE_URL?.trim();
@@ -118,7 +118,8 @@ export async function runOracle(
     (provider === "perplexity" && !hasPerplexityKey) ||
     provider === "other";
   // Perplexity should NOT fall back to OpenRouter - require PERPLEXITY_API_KEY explicitly
-  const openRouterFallback = providerKeyMissing && provider !== "perplexity" && Boolean(openRouterApiKey);
+  const openRouterFallback =
+    providerKeyMissing && provider !== "perplexity" && Boolean(openRouterApiKey);
   if (!baseUrl || openRouterFallback) {
     if (openRouterFallback) {
       baseUrl = defaultOpenRouterBase;
@@ -650,15 +651,17 @@ export async function runOracle(
   const pricing = modelConfig.pricing ?? undefined;
   // Prefer upstream cost from API (e.g., Perplexity) over calculated cost
   const upstreamCost = (response as { _upstream_cost_usd?: number })._upstream_cost_usd;
-  const cost = upstreamCost ?? (pricing
-    ? estimateUsdCost({
-        usage: { inputTokens, outputTokens, reasoningTokens, totalTokens },
-        pricing: {
-          inputUsdPerToken: pricing.inputPerToken,
-          outputUsdPerToken: pricing.outputPerToken,
-        },
-      })?.totalUsd
-    : undefined);
+  const cost =
+    upstreamCost ??
+    (pricing
+      ? estimateUsdCost({
+          usage: { inputTokens, outputTokens, reasoningTokens, totalTokens },
+          pricing: {
+            inputUsdPerToken: pricing.inputPerToken,
+            outputUsdPerToken: pricing.outputPerToken,
+          },
+        })?.totalUsd
+      : undefined);
 
   const effortLabel = modelConfig.reasoning?.effort;
   const modelLabel = effortLabel ? `${modelConfig.model}[${effortLabel}]` : modelConfig.model;

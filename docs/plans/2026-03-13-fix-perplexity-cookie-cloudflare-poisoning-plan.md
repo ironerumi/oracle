@@ -19,13 +19,13 @@ Perplexity browser engine fails with "Could not find the Perplexity prompt edito
 
 **Root cause (verified via Camoufox diagnostic 2026-03-13):**
 
-| Scenario | Result |
-|----------|--------|
-| No cookies | Page loads fine (logged out) |
-| All cookies from file | "Internal Error" |
-| Expired cookies stripped | "Internal Error" |
-| Auth token only | "Internal Error" |
-| Fresh cookies from Chrome | "Internal Error" |
+| Scenario                                          | Result                          |
+| ------------------------------------------------- | ------------------------------- |
+| No cookies                                        | Page loads fine (logged out)    |
+| All cookies from file                             | "Internal Error"                |
+| Expired cookies stripped                          | "Internal Error"                |
+| Auth token only                                   | "Internal Error"                |
+| Fresh cookies from Chrome                         | "Internal Error"                |
 | Navigate first, THEN inject auth cookies + reload | **Works** (logged in, full DOM) |
 
 The `cf_clearance` cookie from Chrome is fingerprint-bound. Camoufox has its own Firefox TLS fingerprint (spoofed at C++ level via BrowserForge). When Cloudflare sees a Chrome-clearance cookie from a Firefox fingerprint, it rejects the request. Perplexity surfaces this as "Internal Error."
@@ -105,17 +105,17 @@ In the write-back block (`index.ts:142-161`), add filters:
 
 ```typescript
 // Cloudflare cookie prefix matcher (future-proof)
-const CF_COOKIE_PREFIXES = ['cf_', '__cf', '_cf', 'CF_'];
+const CF_COOKIE_PREFIXES = ["cf_", "__cf", "_cf", "CF_"];
 export function isCloudflareCookie(name: string): boolean {
-  return CF_COOKIE_PREFIXES.some(p => name.startsWith(p));
+  return CF_COOKIE_PREFIXES.some((p) => name.startsWith(p));
 }
 
 // Internal error page signals
-export const INTERNAL_ERROR_TEXTS = ['Internal Error'];
+export const INTERNAL_ERROR_TEXTS = ["Internal Error"];
 
 // Add #ask-input to PROMPT_SELECTORS:
 export const PROMPT_SELECTORS = [
-  '#ask-input',  // stable ID anchor
+  "#ask-input", // stable ID anchor
   'div[data-lexical-editor][contenteditable="true"]',
   '[role="textbox"][contenteditable="true"]',
 ];
@@ -124,10 +124,10 @@ export const PROMPT_SELECTORS = [
 ### `src/perplexity-browser/cookieFilter.ts` — new file, cookie pre-validation + filtering
 
 ```typescript
-import { BrowserAutomationError } from '../oracle/errors.js';
-import { isCloudflareCookie } from './constants.js';
+import { BrowserAutomationError } from "../oracle/errors.js";
+import { isCloudflareCookie } from "./constants.js";
 
-const AUTH_COOKIE_NAME = '__Secure-next-auth.session-token';
+const AUTH_COOKIE_NAME = "__Secure-next-auth.session-token";
 
 export interface CookieValidationResult {
   authCookies: Array<Record<string, unknown>>;
@@ -140,30 +140,30 @@ export function validateAndFilterCookies(
   const now = Math.floor(Date.now() / 1000);
 
   // Check auth token exists
-  const authToken = rawCookies.find(c => c.name === AUTH_COOKIE_NAME);
+  const authToken = rawCookies.find((c) => c.name === AUTH_COOKIE_NAME);
   if (!authToken) {
     throw new BrowserAutomationError(
       `Cookie file missing ${AUTH_COOKIE_NAME}. Re-export from correct Chrome profile:\n` +
-      '  npx tsx scripts/export-perplexity-cookies.ts "Profile 2"',
-      { stage: 'cookie-validation' },
+        '  npx tsx scripts/export-perplexity-cookies.ts "Profile 2"',
+      { stage: "cookie-validation" },
     );
   }
 
   // Check auth token not expired
-  const exp = typeof authToken.expires === 'number' ? authToken.expires : 0;
+  const exp = typeof authToken.expires === "number" ? authToken.expires : 0;
   if (exp > 0 && exp < now) {
     throw new BrowserAutomationError(
-      'Perplexity auth cookie expired. Re-export:\n' +
-      '  npx tsx scripts/export-perplexity-cookies.ts "Profile 2"',
-      { stage: 'cookie-validation' },
+      "Perplexity auth cookie expired. Re-export:\n" +
+        '  npx tsx scripts/export-perplexity-cookies.ts "Profile 2"',
+      { stage: "cookie-validation" },
     );
   }
 
   // Strip Cloudflare cookies + expired cookies (preserve session cookies: expires <= 0)
-  const filtered = rawCookies.filter(c => {
-    const name = typeof c.name === 'string' ? c.name : '';
+  const filtered = rawCookies.filter((c) => {
+    const name = typeof c.name === "string" ? c.name : "";
     if (isCloudflareCookie(name)) return false;
-    const cExp = typeof c.expires === 'number' ? c.expires : 0;
+    const cExp = typeof c.expires === "number" ? c.expires : 0;
     if (cExp > 0 && cExp < now) return false;
     return true;
   });
@@ -175,23 +175,26 @@ export function validateAndFilterCookies(
 ### `src/perplexity-browser/actions/navigation.ts` — add Internal Error detection
 
 ```typescript
-import { INTERNAL_ERROR_TEXTS, PROMPT_SELECTORS } from '../constants.js';
+import { INTERNAL_ERROR_TEXTS, PROMPT_SELECTORS } from "../constants.js";
 
 export async function ensureNotInternalError(page: Page, log?: BrowserLogger): Promise<void> {
-  const result = await page.evaluate((args: { errorTexts: string[]; editorSels: string[] }) => {
-    const bodyText = document.body?.innerText ?? '';
-    const hasErrorText = args.errorTexts.some(t => bodyText.includes(t));
-    const hasEditor = args.editorSels.some(sel => !!document.querySelector(sel));
-    return { hasErrorText, hasEditor };
-  }, { errorTexts: INTERNAL_ERROR_TEXTS, editorSels: PROMPT_SELECTORS });
+  const result = await page.evaluate(
+    (args: { errorTexts: string[]; editorSels: string[] }) => {
+      const bodyText = document.body?.innerText ?? "";
+      const hasErrorText = args.errorTexts.some((t) => bodyText.includes(t));
+      const hasEditor = args.editorSels.some((sel) => !!document.querySelector(sel));
+      return { hasErrorText, hasEditor };
+    },
+    { errorTexts: INTERNAL_ERROR_TEXTS, editorSels: PROMPT_SELECTORS },
+  );
 
   // Error text present AND no expected DOM landmarks = error page
   if (result.hasErrorText && !result.hasEditor) {
     log?.('[perplexity-browser] Detected "Internal Error" page');
     throw new BrowserAutomationError(
       'Perplexity returned "Internal Error" — session likely revoked server-side.\n' +
-      'Re-export cookies: npx tsx scripts/export-perplexity-cookies.ts "Profile 2"',
-      { stage: 'internal-error' },
+        'Re-export cookies: npx tsx scripts/export-perplexity-cookies.ts "Profile 2"',
+      { stage: "internal-error" },
     );
   }
 }
@@ -205,43 +208,47 @@ export async function ensureNotInternalError(page: Page, log?: BrowserLogger): P
 // --- PRE-VALIDATE COOKIES ---
 let authCookies: Array<Record<string, unknown>> = [];
 if (browserConfig.inlineCookies?.length) {
-  const { authCookies: filtered, droppedCount } = validateAndFilterCookies(browserConfig.inlineCookies);
+  const { authCookies: filtered, droppedCount } = validateAndFilterCookies(
+    browserConfig.inlineCookies,
+  );
   authCookies = filtered;
-  if (droppedCount > 0) log(`[perplexity-browser] Dropped ${droppedCount} Cloudflare/expired cookies`);
+  if (droppedCount > 0)
+    log(`[perplexity-browser] Dropped ${droppedCount} Cloudflare/expired cookies`);
 }
 
 // ... launch Camoufox ...
 
 // --- PHASE 1: Navigate without cookies (establish Cloudflare clearance) ---
-await race(navigateToPerplexity(page, url, log));  // use waitUntil: 'networkidle'
-await race(ensureNotCloudflareBlocked(page, log));  // CF check AFTER Phase 1
+await race(navigateToPerplexity(page, url, log)); // use waitUntil: 'networkidle'
+await race(ensureNotCloudflareBlocked(page, log)); // CF check AFTER Phase 1
 
 // --- PHASE 2: Inject auth cookies + reload ---
 if (authCookies.length > 0) {
   const pwCookies = cdpCookiesToPlaywright(authCookies);
   await context.addCookies(pwCookies);
   log(`[perplexity-browser] Injected ${pwCookies.length} auth cookies, reloading`);
-  await race(navigateToPerplexity(page, url, log));  // use waitUntil: 'domcontentloaded'
+  await race(navigateToPerplexity(page, url, log)); // use waitUntil: 'domcontentloaded'
 }
 
 // --- POST-NAVIGATION CHECKS ---
-await race(ensureNotInternalError(page, log));       // NEW — catches revoked sessions
+await race(ensureNotInternalError(page, log)); // NEW — catches revoked sessions
 await race(ensurePerplexityLoggedIn(page, log, authCookies.length));
 
 // --- WRITE-BACK (filtered) ---
 const now = Math.floor(Date.now() / 1000);
 const seen = new Map<string, boolean>();
 const perplexityCookies = freshCookies
-  .filter((c) => c.domain.includes('perplexity.ai'))
+  .filter((c) => c.domain.includes("perplexity.ai"))
   .filter((c) => !isCloudflareCookie(c.name))
-  .filter((c) => !(typeof c.expires === 'number' && c.expires > 0 && c.expires < now))
-  .filter((c) => {  // deduplicate by domain:name:path
+  .filter((c) => !(typeof c.expires === "number" && c.expires > 0 && c.expires < now))
+  .filter((c) => {
+    // deduplicate by domain:name:path
     const key = `${c.domain}:${c.name}:${c.path}`;
     if (seen.has(key)) return false;
     seen.set(key, true);
     return true;
-  })
-  // ... existing .map(...)
+  });
+// ... existing .map(...)
 ```
 
 ## Dependencies & Risks
@@ -255,6 +262,7 @@ const perplexityCookies = freshCookies
 ## CLAUDE.md Update
 
 Add to "Cookie sync" section:
+
 - Two-phase navigation: Camoufox navigates bare first (gets own `cf_clearance`), then auth cookies injected, then reload. Chrome-exported CF cookies are always stripped — they're fingerprint-bound to Chrome.
 
 ## Sources & References

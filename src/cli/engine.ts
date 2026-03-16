@@ -1,4 +1,4 @@
-import { isProModel, isKnownModel, isPerplexityModel } from "../oracle/modelResolver.js";
+import { isProModel, isPerplexityModel } from "../oracle/modelResolver.js";
 import { MODEL_CONFIGS } from "../oracle/config.js";
 
 export type EngineMode = "api" | "browser";

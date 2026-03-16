@@ -6,8 +6,8 @@
  * is Perplexity-only.
  */
 
-import type { Browser, BrowserContext, Page } from 'playwright-core';
-import type { BrowserLogger } from '../browser/types.js';
+import type { Browser, BrowserContext, Page } from "playwright-core";
+import type { BrowserLogger } from "../browser/types.js";
 
 export interface CamoufoxLaunchOptions {
   headless?: boolean;
@@ -32,7 +32,7 @@ export interface CamoufoxInstance {
  */
 export function cdpCookiesToPlaywright(
   cookies: Array<Record<string, unknown>>,
-  fallbackDomain = '.perplexity.ai',
+  fallbackDomain = ".perplexity.ai",
 ): Array<{
   name: string;
   value: string;
@@ -40,7 +40,7 @@ export function cdpCookiesToPlaywright(
   path: string;
   secure?: boolean;
   httpOnly?: boolean;
-  sameSite?: 'Strict' | 'Lax' | 'None';
+  sameSite?: "Strict" | "Lax" | "None";
   expires?: number;
 }> {
   const result: Array<{
@@ -50,30 +50,30 @@ export function cdpCookiesToPlaywright(
     path: string;
     secure?: boolean;
     httpOnly?: boolean;
-    sameSite?: 'Strict' | 'Lax' | 'None';
+    sameSite?: "Strict" | "Lax" | "None";
     expires?: number;
   }> = [];
 
   for (const c of cookies) {
-    if (!c?.name || typeof c.name !== 'string') continue;
+    if (!c?.name || typeof c.name !== "string") continue;
 
-    const domain = typeof c.domain === 'string' && c.domain ? c.domain : fallbackDomain;
+    const domain = typeof c.domain === "string" && c.domain ? c.domain : fallbackDomain;
     const pw: (typeof result)[number] = {
       name: c.name,
-      value: typeof c.value === 'string' ? c.value : '',
+      value: typeof c.value === "string" ? c.value : "",
       domain,
-      path: typeof c.path === 'string' ? c.path : '/',
+      path: typeof c.path === "string" ? c.path : "/",
     };
 
     if (c.secure === true) pw.secure = true;
     if (c.httpOnly === true) pw.httpOnly = true;
-    if (typeof c.sameSite === 'string') {
+    if (typeof c.sameSite === "string") {
       const cap = c.sameSite.charAt(0).toUpperCase() + c.sameSite.slice(1).toLowerCase();
-      if (cap === 'Strict' || cap === 'Lax' || cap === 'None') {
-        pw.sameSite = cap as 'Strict' | 'Lax' | 'None';
+      if (cap === "Strict" || cap === "Lax" || cap === "None") {
+        pw.sameSite = cap as "Strict" | "Lax" | "None";
       }
     }
-    if (typeof c.expires === 'number' && c.expires > 0) {
+    if (typeof c.expires === "number" && c.expires > 0) {
       pw.expires = c.expires;
     }
 
@@ -95,16 +95,16 @@ export async function launchCamoufox(options: CamoufoxLaunchOptions): Promise<Ca
   // Ensure binary is installed before launching
   await ensureCamoufoxBinary(log);
 
-  log('[perplexity-browser] Launching Camoufox (headless)');
+  log("[perplexity-browser] Launching Camoufox (headless)");
 
   // Dynamic import — camoufox-js is ESM-only
-  const { Camoufox } = await import('camoufox-js');
+  const { Camoufox } = await import("camoufox-js");
   const browser: Browser = await Camoufox({ headless });
 
-  const context = browser.contexts()[0] ?? await browser.newContext();
+  const context = browser.contexts()[0] ?? (await browser.newContext());
   const page = await context.newPage();
 
-  log('[perplexity-browser] Camoufox browser ready');
+  log("[perplexity-browser] Camoufox browser ready");
 
   return { browser, context, page };
 }
@@ -117,20 +117,20 @@ export async function launchCamoufox(options: CamoufoxLaunchOptions): Promise<Ca
 async function ensureCamoufoxBinary(log: BrowserLogger): Promise<void> {
   try {
     // Dynamic import — camoufox-js internals
-    const { camoufoxPath } = await import('camoufox-js/dist/pkgman.js');
+    const { camoufoxPath } = await import("camoufox-js/dist/pkgman.js");
     // Check without downloading (throws if missing)
     camoufoxPath(false);
   } catch {
-    log('[perplexity-browser] Camoufox binary not found — downloading (first run)...');
+    log("[perplexity-browser] Camoufox binary not found — downloading (first run)...");
     try {
-      const { CamoufoxFetcher } = await import('camoufox-js/dist/pkgman.js');
+      const { CamoufoxFetcher } = await import("camoufox-js/dist/pkgman.js");
       const fetcher = new CamoufoxFetcher();
       await fetcher.install();
-      log('[perplexity-browser] Camoufox binary installed successfully');
+      log("[perplexity-browser] Camoufox binary installed successfully");
     } catch (installErr) {
       throw new Error(
         `Failed to download Camoufox browser binary: ${installErr instanceof Error ? installErr.message : installErr}. ` +
-        'Run "npx camoufox-js fetch" manually, or use PERPLEXITY_API_KEY for API access.',
+          'Run "npx camoufox-js fetch" manually, or use PERPLEXITY_API_KEY for API access.',
       );
     }
   }
@@ -141,21 +141,24 @@ async function ensureCamoufoxBinary(log: BrowserLogger): Promise<void> {
  * Returns a cleanup function that removes the hooks.
  */
 export function registerCamoufoxTerminationHooks(browser: Browser, log: BrowserLogger): () => void {
-  const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGQUIT'];
+  const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGQUIT"];
   let handling = false;
 
   const handleSignal = (signal: NodeJS.Signals) => {
     if (handling) return;
     handling = true;
     log(`Received ${signal}; closing Camoufox browser`);
-    void browser.close().catch(() => undefined).finally(() => {
-      const exitCode = signal === 'SIGINT' ? 130 : 1;
-      process.exitCode = exitCode;
-      const isTestRun = process.env.VITEST === '1' || process.env.NODE_ENV === 'test';
-      if (!isTestRun) {
-        process.exit(exitCode);
-      }
-    });
+    void browser
+      .close()
+      .catch(() => undefined)
+      .finally(() => {
+        const exitCode = signal === "SIGINT" ? 130 : 1;
+        process.exitCode = exitCode;
+        const isTestRun = process.env.VITEST === "1" || process.env.NODE_ENV === "test";
+        if (!isTestRun) {
+          process.exit(exitCode);
+        }
+      });
   };
 
   for (const signal of signals) {

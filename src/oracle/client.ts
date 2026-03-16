@@ -64,7 +64,8 @@ export function createDefaultClientFactory(): ClientFactory {
     },
   ): ClientLike => {
     // Route Perplexity first — it has its own SDK, must not be captured by proxy logic
-    const knownConfig = options?.model && isKnownModel(options.model) ? MODEL_CONFIGS[options.model] : undefined;
+    const knownConfig =
+      options?.model && isKnownModel(options.model) ? MODEL_CONFIGS[options.model] : undefined;
     if (knownConfig?.provider === "perplexity" && options?.model) {
       return createPerplexityClient(key, options.model, options.resolvedModelId, options.baseUrl);
     }

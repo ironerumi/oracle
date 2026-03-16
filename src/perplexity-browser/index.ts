@@ -1,20 +1,29 @@
-import { writeFile, mkdir } from 'node:fs/promises';
-import path from 'node:path';
-import type { BrowserRunOptions, BrowserRunResult, BrowserLogger } from '../browser/types.js';
-import type { BrowserSessionConfig } from '../sessionStore.js';
-import { estimateTokenCount } from '../browser/utils.js';
-import { BrowserAutomationError } from '../oracle/errors.js';
-import { PERPLEXITY_URL, isCloudflareCookie } from './constants.js';
-import { validateAndFilterCookies } from './cookieFilter.js';
-import { resolvePerplexityTimeout } from './config.js';
-import { launchCamoufox, registerCamoufoxTerminationHooks, cdpCookiesToPlaywright } from './camoufoxLifecycle.js';
-import { navigateToPerplexity, ensureNotCloudflareBlocked, ensurePerplexityLoggedIn, ensureNotInternalError } from './actions/navigation.js';
-import { selectPerplexityModel } from './actions/modelSelection.js';
-import { navigateToSpace } from './actions/spaceNavigation.js';
-import { submitPerplexityPrompt } from './actions/promptSubmit.js';
-import { capturePerplexityResponse, formatWithCitations } from './actions/responseCapture.js';
-import { enableSocialSource } from './actions/sourceFilter.js';
-import { activateDeepResearch } from './actions/deepResearch.js';
+import { writeFile, mkdir } from "node:fs/promises";
+import path from "node:path";
+import type { BrowserRunOptions, BrowserRunResult, BrowserLogger } from "../browser/types.js";
+import type { BrowserSessionConfig } from "../sessionStore.js";
+import { estimateTokenCount } from "../browser/utils.js";
+import { BrowserAutomationError } from "../oracle/errors.js";
+import { PERPLEXITY_URL, isCloudflareCookie } from "./constants.js";
+import { validateAndFilterCookies } from "./cookieFilter.js";
+import { resolvePerplexityTimeout } from "./config.js";
+import {
+  launchCamoufox,
+  registerCamoufoxTerminationHooks,
+  cdpCookiesToPlaywright,
+} from "./camoufoxLifecycle.js";
+import {
+  navigateToPerplexity,
+  ensureNotCloudflareBlocked,
+  ensurePerplexityLoggedIn,
+  ensureNotInternalError,
+} from "./actions/navigation.js";
+import { selectPerplexityModel } from "./actions/modelSelection.js";
+import { navigateToSpace } from "./actions/spaceNavigation.js";
+import { submitPerplexityPrompt } from "./actions/promptSubmit.js";
+import { capturePerplexityResponse, formatWithCitations } from "./actions/responseCapture.js";
+import { enableSocialSource } from "./actions/sourceFilter.js";
+import { activateDeepResearch } from "./actions/deepResearch.js";
 
 export interface PerplexityBrowserOptions {
   /** Perplexity Space slug or full URL. */
@@ -43,17 +52,17 @@ export function createPerplexityBrowserExecutor(
     const promptText = runOptions.prompt?.trim();
 
     if (!promptText) {
-      throw new BrowserAutomationError('Prompt text is required', { stage: 'validation' });
+      throw new BrowserAutomationError("Prompt text is required", { stage: "validation" });
     }
 
     if (runOptions.attachments?.length) {
       throw new BrowserAutomationError(
-        'Attachments are not supported in Perplexity browser mode.',
-        { stage: 'validation' },
+        "Attachments are not supported in Perplexity browser mode.",
+        { stage: "validation" },
       );
     }
 
-    log('[perplexity-browser] Starting Perplexity browser executor (Camoufox headless)');
+    log("[perplexity-browser] Starting Perplexity browser executor (Camoufox headless)");
     if (space) log(`[perplexity-browser] Space: ${space}`);
 
     const timeoutMs = resolvePerplexityTimeout(browserConfig.desiredModel, browserConfig.timeoutMs);
@@ -61,13 +70,19 @@ export function createPerplexityBrowserExecutor(
 
     // Warn about Chrome-specific flags that are no-ops for Camoufox
     if (browserConfig.chromeProfile) {
-      log('[perplexity-browser] Warning: --browser-chrome-profile is ignored for Perplexity (uses Camoufox, not Chrome)');
+      log(
+        "[perplexity-browser] Warning: --browser-chrome-profile is ignored for Perplexity (uses Camoufox, not Chrome)",
+      );
     }
     if (browserConfig.chromePath) {
-      log('[perplexity-browser] Warning: --browser-chrome-path is ignored for Perplexity (uses Camoufox, not Chrome)');
+      log(
+        "[perplexity-browser] Warning: --browser-chrome-path is ignored for Perplexity (uses Camoufox, not Chrome)",
+      );
     }
     if (browserConfig.debugPort) {
-      log('[perplexity-browser] Warning: --browser-debug-port is ignored for Perplexity (uses Camoufox, not Chrome)');
+      log(
+        "[perplexity-browser] Warning: --browser-debug-port is ignored for Perplexity (uses Camoufox, not Chrome)",
+      );
     }
 
     // --- PRE-VALIDATE COOKIES (before browser launch) ---
@@ -76,7 +91,8 @@ export function createPerplexityBrowserExecutor(
       const raw = browserConfig.inlineCookies as unknown as Array<Record<string, unknown>>;
       const { authCookies: filtered, droppedCount } = validateAndFilterCookies(raw);
       authCookies = filtered;
-      if (droppedCount > 0) log(`[perplexity-browser] Dropped ${droppedCount} Cloudflare/expired cookies`);
+      if (droppedCount > 0)
+        log(`[perplexity-browser] Dropped ${droppedCount} Cloudflare/expired cookies`);
     }
 
     // Launch Camoufox headless browser
@@ -86,11 +102,12 @@ export function createPerplexityBrowserExecutor(
     try {
       // Watch for premature browser close
       const disconnectPromise = new Promise<never>((_, reject) => {
-        browser.once('disconnected', () => {
-          reject(new BrowserAutomationError(
-            'Browser closed before Perplexity response was captured.',
-            { stage: 'browser-disconnect' },
-          ));
+        browser.once("disconnected", () => {
+          reject(
+            new BrowserAutomationError("Browser closed before Perplexity response was captured.", {
+              stage: "browser-disconnect",
+            }),
+          );
         });
       });
       const race = <T>(p: Promise<T>): Promise<T> => Promise.race([p, disconnectPromise]);
@@ -98,7 +115,9 @@ export function createPerplexityBrowserExecutor(
       // Inject __name shim — esbuild/tsx decorates function declarations with __name() which
       // leaks into page.evaluate() calls and fails because __name doesn't exist in browser context.
       // addInitScript survives navigations.
-      await context.addInitScript(() => { (window as any).__name = (fn: any) => fn; });
+      await context.addInitScript(() => {
+        (window as any).__name = (fn: any) => fn;
+      });
 
       // --- PHASE 1: Navigate bare (establish Camoufox's own CF clearance) ---
       // Use domcontentloaded, not networkidle — Perplexity's SPA has persistent
@@ -118,7 +137,9 @@ export function createPerplexityBrowserExecutor(
       }
 
       if (appliedCookies === 0) {
-        log('[perplexity-browser] Warning: no cookies applied. Provide --browser-inline-cookies-file with Perplexity cookies.');
+        log(
+          "[perplexity-browser] Warning: no cookies applied. Provide --browser-inline-cookies-file with Perplexity cookies.",
+        );
       }
 
       // --- POST-NAVIGATION CHECKS ---
@@ -137,8 +158,8 @@ export function createPerplexityBrowserExecutor(
       await race(enableSocialSource(page, log));
 
       // Activate Deep Research mode for sonar-deep-research
-      const normalizedModel = (desiredModel?.trim() || 'ppl/sonar').toLowerCase();
-      if (normalizedModel === 'ppl/sonar-deep-research') {
+      const normalizedModel = (desiredModel?.trim() || "ppl/sonar").toLowerCase();
+      if (normalizedModel === "ppl/sonar-deep-research") {
         await race(activateDeepResearch(page, log));
       }
 
@@ -155,9 +176,9 @@ export function createPerplexityBrowserExecutor(
           const freshCookies = await context.cookies();
           const seen = new Map<string, boolean>();
           const perplexityCookies = freshCookies
-            .filter((c) => c.domain.includes('perplexity.ai'))
+            .filter((c) => c.domain.includes("perplexity.ai"))
             .filter((c) => !isCloudflareCookie(c.name))
-            .filter((c) => !(typeof c.expires === 'number' && c.expires > 0 && c.expires < now))
+            .filter((c) => !(typeof c.expires === "number" && c.expires > 0 && c.expires < now))
             .filter((c) => {
               const key = `${c.domain}:${c.name}:${c.path}`;
               if (seen.has(key)) return false;
@@ -165,18 +186,26 @@ export function createPerplexityBrowserExecutor(
               return true;
             })
             .map((c) => ({
-              name: c.name, value: c.value, domain: c.domain,
-              path: c.path || '/', secure: c.secure ?? true, httpOnly: c.httpOnly ?? false,
-              ...(c.sameSite && c.sameSite !== 'None' ? { sameSite: c.sameSite } : {}),
-              ...(typeof c.expires === 'number' && c.expires > 0 ? { expires: c.expires } : {}),
+              name: c.name,
+              value: c.value,
+              domain: c.domain,
+              path: c.path || "/",
+              secure: c.secure ?? true,
+              httpOnly: c.httpOnly ?? false,
+              ...(c.sameSite && c.sameSite !== "None" ? { sameSite: c.sameSite } : {}),
+              ...(typeof c.expires === "number" && c.expires > 0 ? { expires: c.expires } : {}),
             }));
           if (perplexityCookies.length > 0) {
             await mkdir(path.dirname(cookieFilePath), { recursive: true });
             await writeFile(cookieFilePath, JSON.stringify(perplexityCookies, null, 2));
-            log(`[perplexity-browser] Refreshed ${perplexityCookies.length} cookies → ${cookieFilePath}`);
+            log(
+              `[perplexity-browser] Refreshed ${perplexityCookies.length} cookies → ${cookieFilePath}`,
+            );
           }
         } catch (e) {
-          log(`[perplexity-browser] Cookie write-back failed (non-fatal): ${e instanceof Error ? e.message : e}`);
+          log(
+            `[perplexity-browser] Cookie write-back failed (non-fatal): ${e instanceof Error ? e.message : e}`,
+          );
         }
       }
 

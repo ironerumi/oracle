@@ -12,7 +12,12 @@ if (process.argv[2] === "oracle-mcp") {
   await startMcpServer();
   process.exit(0);
 }
-import { resolveEngine, isBrowserCompatible, type EngineMode, defaultWaitPreference } from "../src/cli/engine.js";
+import {
+  resolveEngine,
+  isBrowserCompatible,
+  type EngineMode,
+  defaultWaitPreference,
+} from "../src/cli/engine.js";
 import { shouldRequirePrompt } from "../src/cli/promptRequirement.js";
 import chalk from "chalk";
 import type { SessionMetadata, SessionMode, BrowserSessionConfig } from "../src/sessionStore.js";
@@ -20,14 +25,13 @@ import { sessionStore, pruneOldSessions } from "../src/sessionStore.js";
 import {
   DEFAULT_MODEL,
   MODEL_CONFIGS,
-  runOracle,
   readFiles,
   estimateRequestTokens,
   buildRequestBody,
 } from "../src/oracle.js";
 import { isKnownModel, isPerplexityModel } from "../src/oracle/modelResolver.js";
 import type { ModelName, PreviewMode, RunOracleOptions } from "../src/oracle.js";
-import { CHATGPT_URL, normalizeChatgptUrl } from "../src/browserMode.js";
+import { CHATGPT_URL } from "../src/browserMode.js";
 import { createRemoteBrowserExecutor } from "../src/remote/client.js";
 import { createGeminiWebExecutor } from "../src/gemini-web/index.js";
 import { createPerplexityBrowserExecutor } from "../src/perplexity-browser/index.js";
@@ -673,7 +677,12 @@ program
       "Display Gemini thinking process (Gemini web/cookie mode only).",
     ).default(false),
   )
-  .addOption(new Option("--space <slug>", "Perplexity Space slug or URL for query context (Perplexity browser mode only)."))
+  .addOption(
+    new Option(
+      "--space <slug>",
+      "Perplexity Space slug or URL for query context (Perplexity browser mode only).",
+    ),
+  )
   .option(
     "--retain-hours <hours>",
     "Prune stored sessions older than this many hours before running (set 0 to disable).",
@@ -1318,7 +1327,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
   }
 
   // Resolve model first so engine selection can consider provider-specific keys (e.g., PERPLEXITY_API_KEY)
-  if (optionUsesDefault('model') && userConfig.model) {
+  if (optionUsesDefault("model") && userConfig.model) {
     options.model = userConfig.model;
   }
   const preferredEngine = options.engine ?? userConfig.engine;
@@ -1411,11 +1420,13 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     engine = "api";
   }
   if (normalizedMultiModels.length > 0) {
-    const hasPplModel = normalizedMultiModels.some((m) => m.startsWith("ppl/")) || primaryModelCandidate.startsWith("ppl/");
+    const hasPplModel =
+      normalizedMultiModels.some((m) => m.startsWith("ppl/")) ||
+      primaryModelCandidate.startsWith("ppl/");
     if (hasPplModel) {
       throw new Error(
         "Perplexity models (ppl/*) cannot be used with --models. " +
-        "Browser executor supports a single model only.",
+          "Browser executor supports a single model only.",
       );
     }
     engine = "api";
@@ -1424,11 +1435,11 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     throw new Error("--remote-host does not support --models yet. Use API engine locally instead.");
   }
   if (options.space && !isPerplexity) {
-    throw new Error('--space is only supported with Perplexity models (ppl/*).');
+    throw new Error("--space is only supported with Perplexity models (ppl/*).");
   }
   // --space forces browser engine for ppl/* models (overrides API preference)
-  if (options.space && isPerplexity && engine === 'api') {
-    engine = 'browser';
+  if (options.space && isPerplexity && engine === "api") {
+    engine = "browser";
   }
   const resolvedModel: ModelName =
     normalizedMultiModels[0] ?? (isGemini ? resolveApiModel(cliModelArg) : resolvedModelCandidate);
@@ -1450,7 +1461,12 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       ? (MODEL_CONFIGS[resolvedModel].apiModel ?? resolvedModel)
       : resolvedModel;
   const resolvedBaseUrl = normalizeBaseUrl(
-    options.baseUrl ?? (isPerplexity ? undefined : isClaude ? process.env.ANTHROPIC_BASE_URL : process.env.OPENAI_BASE_URL),
+    options.baseUrl ??
+      (isPerplexity
+        ? undefined
+        : isClaude
+          ? process.env.ANTHROPIC_BASE_URL
+          : process.env.OPENAI_BASE_URL),
   );
   const { models: _rawModels, ...optionsWithoutModels } = options;
   const resolvedOptions: ResolvedCliOptions = { ...optionsWithoutModels, model: resolvedModel };

@@ -1,7 +1,7 @@
-import type { Page } from 'playwright-core';
-import type { BrowserLogger } from '../../browser/types.js';
-import { BrowserAutomationError } from '../../oracle/errors.js';
-import { buildSpaceUrl } from '../constants.js';
+import type { Page } from "playwright-core";
+import type { BrowserLogger } from "../../browser/types.js";
+import { BrowserAutomationError } from "../../oracle/errors.js";
+import { buildSpaceUrl } from "../constants.js";
 
 /**
  * Resolve a --space argument to a full Perplexity Space URL.
@@ -15,14 +15,13 @@ import { buildSpaceUrl } from '../constants.js';
 export function resolveSpaceUrl(space: string): string {
   const trimmed = space.trim();
   if (!trimmed) {
-    throw new BrowserAutomationError(
-      'Empty --space value. Provide a Space slug or full URL.',
-      { stage: 'space-navigation' },
-    );
+    throw new BrowserAutomationError("Empty --space value. Provide a Space slug or full URL.", {
+      stage: "space-navigation",
+    });
   }
 
   // Full URL
-  if (trimmed.startsWith('http')) {
+  if (trimmed.startsWith("http")) {
     return trimmed;
   }
 
@@ -33,9 +32,9 @@ export function resolveSpaceUrl(space: string): string {
 
   // Short name without hash — reject
   throw new BrowserAutomationError(
-    'Space slug must include the hash suffix. Find the full slug in your Perplexity Space URL ' +
+    "Space slug must include the hash suffix. Find the full slug in your Perplexity Space URL " +
       '(e.g., "my-space-0eNIgGZIRbu0fQYD3x4Dsw").',
-    { stage: 'space-navigation', slug: trimmed },
+    { stage: "space-navigation", slug: trimmed },
   );
 }
 
@@ -44,7 +43,7 @@ export function resolveSpaceUrl(space: string): string {
  */
 function extractSlug(space: string): string {
   const trimmed = space.trim();
-  if (trimmed.startsWith('http')) {
+  if (trimmed.startsWith("http")) {
     try {
       const pathname = new URL(trimmed).pathname;
       const match = pathname.match(/\/spaces\/(.+)/);
@@ -57,7 +56,7 @@ function extractSlug(space: string): string {
 }
 
 // Space "New Thread" button texts (locale-dependent)
-const NEW_THREAD_TEXTS = ['New Thread', '新しいスレッド', 'Nouveau fil', 'Neuer Thread'];
+const NEW_THREAD_TEXTS = ["New Thread", "新しいスレッド", "Nouveau fil", "Neuer Thread"];
 
 /**
  * Navigate to a Perplexity Space and verify the landing page.
@@ -72,7 +71,7 @@ export async function navigateToSpace(
   const url = resolveSpaceUrl(space);
   log?.(`[perplexity-browser] Navigating to Space: ${url}`);
 
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
 
   // Verify we landed on the space (not redirected to home or 404)
   const currentUrl = await page.evaluate(() => location.href);
@@ -81,7 +80,7 @@ export async function navigateToSpace(
   if (!currentUrl.includes(slug)) {
     throw new BrowserAutomationError(
       `Space not found: ${slug}. Verify the Space exists in your Perplexity account.`,
-      { stage: 'space-navigation', slug },
+      { stage: "space-navigation", slug },
     );
   }
 
@@ -92,15 +91,16 @@ export async function navigateToSpace(
 
   // Check if prompt editor is already present; if not, try "New Thread" button.
   const clickVal = await page.evaluate((newThreadTexts: string[]) => {
-    const editor = document.querySelector('[data-lexical-editor][contenteditable="true"]')
-      ?? document.querySelector('[role="textbox"][contenteditable="true"]');
+    const editor =
+      document.querySelector('[data-lexical-editor][contenteditable="true"]') ??
+      document.querySelector('[role="textbox"][contenteditable="true"]');
     if (editor) return { hadEditor: true };
 
     const allBtns = document.querySelectorAll('button, a[role="button"]');
     for (const btn of allBtns) {
-      const text = btn.textContent?.trim() ?? '';
-      const label = btn.getAttribute('aria-label') ?? '';
-      if (newThreadTexts.some(t => text.includes(t) || label.includes(t))) {
+      const text = btn.textContent?.trim() ?? "";
+      const label = btn.getAttribute("aria-label") ?? "";
+      if (newThreadTexts.some((t) => text.includes(t) || label.includes(t))) {
         (btn as HTMLElement).click();
         return { hadEditor: false, clicked: text || label };
       }
@@ -109,7 +109,7 @@ export async function navigateToSpace(
   }, NEW_THREAD_TEXTS);
 
   if (clickVal?.hadEditor) {
-    log?.('[perplexity-browser] Prompt editor already present in Space');
+    log?.("[perplexity-browser] Prompt editor already present in Space");
   } else if (clickVal?.clicked) {
     log?.(`[perplexity-browser] Clicked "New Thread" button: "${clickVal.clicked}"`);
     await new Promise((r) => setTimeout(r, 1_000));

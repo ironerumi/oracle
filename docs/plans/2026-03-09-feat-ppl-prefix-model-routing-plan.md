@@ -34,32 +34,32 @@ No apiModel?   →  Browser (always)
 
 ### Model Registry (verified live 2026-03-09 via Camoufox)
 
-| Model | `apiModel` | Browser UI label | Thinking | Notes |
-|---|---|---|---|---|
-| `ppl/sonar` | `sonar` | "Sonar" | No | |
-| `ppl/sonar-pro` | `sonar-pro` | "Sonar" | No | UI doesn't distinguish tiers |
-| `ppl/sonar-reasoning-pro` | `sonar-reasoning-pro` | "Sonar" | No | |
-| `ppl/sonar-deep-research` | `sonar-deep-research` | "Sonar" + DR toggle | No | |
-| `ppl/best` | — | "Best" | No | |
-| `ppl/gpt-5.4` | — | "GPT-5.4" | Yes (default OFF) | |
-| `ppl/gemini-3.1-pro` | — | "Gemini 3.1 Pro" | Yes (default ON) | |
-| `ppl/claude-sonnet-4.6` | — | "Claude Sonnet 4.6" | Yes (default OFF) | |
-| `ppl/claude-opus-4.6` | — | "Claude Opus 4.6" | Yes (assumed) | **Max-only** — fail fast |
-| `ppl/kimi-k2.5` | — | "Kimi K2.5" | Yes (default ON) | |
+| Model                     | `apiModel`            | Browser UI label    | Thinking          | Notes                        |
+| ------------------------- | --------------------- | ------------------- | ----------------- | ---------------------------- |
+| `ppl/sonar`               | `sonar`               | "Sonar"             | No                |                              |
+| `ppl/sonar-pro`           | `sonar-pro`           | "Sonar"             | No                | UI doesn't distinguish tiers |
+| `ppl/sonar-reasoning-pro` | `sonar-reasoning-pro` | "Sonar"             | No                |                              |
+| `ppl/sonar-deep-research` | `sonar-deep-research` | "Sonar" + DR toggle | No                |                              |
+| `ppl/best`                | —                     | "Best"              | No                |                              |
+| `ppl/gpt-5.4`             | —                     | "GPT-5.4"           | Yes (default OFF) |                              |
+| `ppl/gemini-3.1-pro`      | —                     | "Gemini 3.1 Pro"    | Yes (default ON)  |                              |
+| `ppl/claude-sonnet-4.6`   | —                     | "Claude Sonnet 4.6" | Yes (default OFF) |                              |
+| `ppl/claude-opus-4.6`     | —                     | "Claude Opus 4.6"   | Yes (assumed)     | **Max-only** — fail fast     |
+| `ppl/kimi-k2.5`           | —                     | "Kimi K2.5"         | Yes (default ON)  |                              |
 
 ### Engine Resolution (updated `resolveEngine()`)
 
 ```typescript
-if (config?.provider === 'perplexity') {
-  if (explicitEngine === 'api') {
+if (config?.provider === "perplexity") {
+  if (explicitEngine === "api") {
     if (!config.apiModel) throw new Error(`'${model}' has no API equivalent. Remove --engine api.`);
     if (!env.PERPLEXITY_API_KEY) throw new Error(`'${model}' requires PERPLEXITY_API_KEY.`);
-    return 'api';
+    return "api";
   }
-  if (explicitEngine === 'browser') return 'browser';
+  if (explicitEngine === "browser") return "browser";
   // No explicit engine: prefer API if model has apiModel + key
-  if (config.apiModel && env.PERPLEXITY_API_KEY) return 'api';
-  return 'browser';
+  if (config.apiModel && env.PERPLEXITY_API_KEY) return "api";
+  return "browser";
 }
 ```
 
@@ -70,11 +70,11 @@ No new fields on `ModelConfig`. Uses existing `apiModel` + `provider`.
 ```typescript
 // isBrowserCompatible() — both sites
 const config = isKnownModel(model) ? MODEL_CONFIGS[model] : undefined;
-if (config?.provider === 'perplexity') return true;  // all ppl/* can browser
-return model.startsWith('gpt-') || model.startsWith('gemini');
+if (config?.provider === "perplexity") return true; // all ppl/* can browser
+return model.startsWith("gpt-") || model.startsWith("gemini");
 
 // isPerplexity in oracle-cli.ts
-const isPerplexity = isKnownModel(model) && MODEL_CONFIGS[model]?.provider === 'perplexity';
+const isPerplexity = isKnownModel(model) && MODEL_CONFIGS[model]?.provider === "perplexity";
 ```
 
 ### Thinking Toggle Activation
@@ -82,10 +82,12 @@ const isPerplexity = isKnownModel(model) && MODEL_CONFIGS[model]?.provider === '
 After model selection in the picker, ensure thinking is ON.
 
 **DOM structure** (verified live 2026-03-09):
+
 - `[role="menuitemcheckbox"]` — sibling of selected `menuitemradio`
 - Contains `button[role="switch"][aria-checked][data-state]`
 
 **Logic:** After selecting a model, while picker is still open:
+
 1. Find `[role="menuitemcheckbox"]` — at most one in the picker dropdown
 2. If not found → skip (Sonar, Best don't have it)
 3. Check inner `button[role="switch"]` `aria-checked`
@@ -99,6 +101,7 @@ After model selection in the picker, ensure thinking is ON.
 "Claude Opus 4.6" entry text includes "Max" suffix ("Claude Opus 4.6Max").
 
 **Strategy:** After opening picker, before clicking model:
+
 1. Find `menuitemradio` matching target label
 2. Check if the element has `disabled`, `aria-disabled="true"`, or `data-disabled` attribute
 3. If disabled → throw `BrowserAutomationError('ppl/claude-opus-4.6 requires Perplexity Max subscription')`
@@ -109,6 +112,7 @@ After model selection in the picker, ensure thinking is ON.
 Picker button `aria-label` is now dynamic (shows selected model name).
 
 **Fix:** `MODEL_PICKER_SELECTORS` structural fallbacks:
+
 - Primary: `button[aria-haspopup="menu"][aria-label]` in prompt toolbar
 - Secondary: `button[aria-label="Model"]`
 - Fallback: buttons adjacent to `[data-lexical-editor]` with `aria-haspopup="menu"`
@@ -118,8 +122,9 @@ Picker button `aria-label` is now dynamic (shows selected model name).
 ### Hard Cutover: Bare Sonar Removed
 
 Bare `sonar*` removed from `MODEL_CONFIGS` and `KnownModelName`. Explicit migration check:
+
 ```typescript
-const REMOVED_SONAR = ['sonar', 'sonar-pro', 'sonar-reasoning-pro', 'sonar-deep-research'];
+const REMOVED_SONAR = ["sonar", "sonar-pro", "sonar-reasoning-pro", "sonar-deep-research"];
 if (REMOVED_SONAR.includes(model.toLowerCase())) {
   throw new Error(`Model '${model}' moved to 'ppl/${model}'. Update your --model flag.`);
 }
@@ -136,12 +141,14 @@ if (REMOVED_SONAR.includes(model.toLowerCase())) {
 ### `desiredModel` Flow
 
 `ppl/*` is the full key everywhere. `PERPLEXITY_MODEL_LABELS` keyed by full name:
+
 - `buildBrowserConfig()`: `config.provider === 'perplexity'` → `desiredModel = model`
 - `selectPerplexityModel('ppl/claude-sonnet-4.6')` → looks up `PERPLEXITY_MODEL_LABELS['ppl/claude-sonnet-4.6']` → `['Claude Sonnet 4.6']`
 
 ### Known Out-of-Scope
 
 Pre-existing P1 gaps — not introduced by this feature:
+
 - `restartSession` missing Perplexity executor path
 - `--space` not persisted in session metadata
 - Detached session execution missing Perplexity deps
@@ -197,19 +204,19 @@ Pre-existing P1 gaps — not introduced by this feature:
 
 ## File Change Map
 
-| File | Change |
-|---|---|
-| `src/oracle/types.ts` | Add `ppl/*` to `KnownModelName`, remove bare sonar |
-| `src/oracle/config.ts` | Replace 4 bare sonar → 10 `ppl/*` configs (4 sonar + 6 browser-only) |
-| `src/cli/engine.ts` | `resolveEngine()`: perplexity apiModel logic; `isBrowserCompatible()`: provider check |
-| `src/cli/runOptions.ts` | Sync `isBrowserCompatible()` |
-| `src/cli/options.ts` | `inferModelFromLabel()`: recognize `ppl/*`, don't fall through to GPT |
-| `bin/oracle-cli.ts` | `isPerplexity`: provider check; migration error; `--space` forces browser; help text |
-| `src/perplexity-browser/constants.ts` | `PERPLEXITY_MODEL_LABELS` keyed `ppl/*`; picker selectors |
-| `src/cli/browserConfig.ts` | `BROWSER_MODEL_LABELS`: `ppl/*`; `isPerplexityModel` at line 126: provider check; `buildBrowserConfig()` desiredModel path |
-| `src/perplexity-browser/actions/modelSelection.ts` | Thinking toggle, Max detection |
-| `src/perplexity-browser/index.ts` | Default model, DR check |
-| `src/perplexity-browser/config.ts` | Timeout check |
+| File                                               | Change                                                                                                                     |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `src/oracle/types.ts`                              | Add `ppl/*` to `KnownModelName`, remove bare sonar                                                                         |
+| `src/oracle/config.ts`                             | Replace 4 bare sonar → 10 `ppl/*` configs (4 sonar + 6 browser-only)                                                       |
+| `src/cli/engine.ts`                                | `resolveEngine()`: perplexity apiModel logic; `isBrowserCompatible()`: provider check                                      |
+| `src/cli/runOptions.ts`                            | Sync `isBrowserCompatible()`                                                                                               |
+| `src/cli/options.ts`                               | `inferModelFromLabel()`: recognize `ppl/*`, don't fall through to GPT                                                      |
+| `bin/oracle-cli.ts`                                | `isPerplexity`: provider check; migration error; `--space` forces browser; help text                                       |
+| `src/perplexity-browser/constants.ts`              | `PERPLEXITY_MODEL_LABELS` keyed `ppl/*`; picker selectors                                                                  |
+| `src/cli/browserConfig.ts`                         | `BROWSER_MODEL_LABELS`: `ppl/*`; `isPerplexityModel` at line 126: provider check; `buildBrowserConfig()` desiredModel path |
+| `src/perplexity-browser/actions/modelSelection.ts` | Thinking toggle, Max detection                                                                                             |
+| `src/perplexity-browser/index.ts`                  | Default model, DR check                                                                                                    |
+| `src/perplexity-browser/config.ts`                 | Timeout check                                                                                                              |
 
 **No new files. No new ModelConfig fields. Uses existing `apiModel` + `provider`.**
 
@@ -222,57 +229,67 @@ Pre-existing P1 gaps — not introduced by this feature:
 ## Session Log — 2026-03-10
 
 ### Decisions
-| Decision | Chosen | Rejected | Why |
-|----------|--------|----------|-----|
-| Picker button click mechanism | Playwright `locator.click()` | `page.evaluate` + `element.click()` | Radix UI menus require real pointer events; evaluate clicks don't open dropdowns |
-| esbuild `__name` leak fix | `context.addInitScript` shim injecting `__name = fn => fn` | Convert all named fns to anonymous / inline pointer events | Shim is one line, survives navigations, fixes all current + future evaluate calls |
-| Menu item scanning | Single `page.evaluate` scan + Playwright click on matched index | Per-item `locator.textContent()` iteration | Playwright waits 30s per item for actionability — too slow for 15+ menu items |
+
+| Decision                      | Chosen                                                          | Rejected                                                   | Why                                                                               |
+| ----------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Picker button click mechanism | Playwright `locator.click()`                                    | `page.evaluate` + `element.click()`                        | Radix UI menus require real pointer events; evaluate clicks don't open dropdowns  |
+| esbuild `__name` leak fix     | `context.addInitScript` shim injecting `__name = fn => fn`      | Convert all named fns to anonymous / inline pointer events | Shim is one line, survives navigations, fixes all current + future evaluate calls |
+| Menu item scanning            | Single `page.evaluate` scan + Playwright click on matched index | Per-item `locator.textContent()` iteration                 | Playwright waits 30s per item for actionability — too slow for 15+ menu items     |
 
 ### Files Modified
+
 - `src/oracle/types.ts` — replaced 4 bare `sonar*` with 10 `ppl/*` in KnownModelName
 - `src/oracle/config.ts` — 10 `ppl/*` MODEL_CONFIGS entries (4 sonar w/ apiModel, 6 browser-only)
 - `src/cli/engine.ts` — resolveEngine perplexity apiModel logic + isBrowserCompatible provider check
 - `src/cli/options.ts` — REMOVED_SONAR migration error, ppl/ passthrough in inferModelFromLabel
 - `src/cli/runOptions.ts` — error message update
-- `src/cli/browserConfig.ts` — BROWSER_MODEL_LABELS ppl/*, isPerplexityModel by provider
+- `src/cli/browserConfig.ts` — BROWSER_MODEL_LABELS ppl/\*, isPerplexityModel by provider
 - `bin/oracle-cli.ts` — isPerplexity by provider, --space forces browser, --models+ppl/ error, help text, baseUrl suppression
-- `src/perplexity-browser/constants.ts` — PERPLEXITY_MODEL_LABELS rekeyed ppl/*, THINKING_MODELS map, picker button texts + selectors
+- `src/perplexity-browser/constants.ts` — PERPLEXITY_MODEL_LABELS rekeyed ppl/\*, THINKING_MODELS map, picker button texts + selectors
 - `src/perplexity-browser/actions/modelSelection.ts` — full rewrite: Playwright locators, thinking toggle, Max detection, single-evaluate scan
-- `src/perplexity-browser/actions/sourceFilter.ts` — `const clickRadix =` → `function clickRadix()` to avoid __name
-- `src/perplexity-browser/actions/deepResearch.ts` — same __name fix + comment update
-- `src/perplexity-browser/index.ts` — __name shim, default model ppl/sonar, DR check ppl/sonar-deep-research
+- `src/perplexity-browser/actions/sourceFilter.ts` — `const clickRadix =` → `function clickRadix()` to avoid \_\_name
+- `src/perplexity-browser/actions/deepResearch.ts` — same \_\_name fix + comment update
+- `src/perplexity-browser/index.ts` — \_\_name shim, default model ppl/sonar, DR check ppl/sonar-deep-research
 - `src/perplexity-browser/config.ts` — timeout check ppl/sonar-deep-research
-- `.claude/CLAUDE.md` — updated architecture docs for ppl/* routing
+- `.claude/CLAUDE.md` — updated architecture docs for ppl/\* routing
 
 ### Session Export
+
 - Full history: .sessions/260309-1439_fa249bd8/main.md
 
 ### Linear Status
+
 - NAI-114: In Progress — all 4 phases implemented + validated, PR not yet created
 
 ### Open / Next
+
 - All items resolved in session 2026-03-10b below
 
 ## Session Log — 2026-03-10b
 
 ### Decisions
-| Decision | Chosen | Rejected | Why |
-|----------|--------|----------|-----|
-| Picker button detection | Page-wide `button[aria-haspopup="menu"]` search excluding [+] by aria-label | Walk up from `[data-lexical-editor]` ancestors | Model button is in a sibling grid cell, not an ancestor of the editor; ancestor walk finds [+] "Add tools" button instead |
-| Hydration wait | Wait for `[data-lexical-editor]` + 1s delay before searching | `waitUntil: 'domcontentloaded'` only | Model picker button renders only after React hydration; `domcontentloaded` returns too early |
-| Opus Max-only handling | No special handling — Opus IS in picker for all users (lock icon for non-Max) | `PERPLEXITY_MAX_ONLY_MODELS` fail-fast array | User confirmed Opus is visible but gated, not hidden; wrong to assume hidden |
+
+| Decision                | Chosen                                                                        | Rejected                                       | Why                                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Picker button detection | Page-wide `button[aria-haspopup="menu"]` search excluding [+] by aria-label   | Walk up from `[data-lexical-editor]` ancestors | Model button is in a sibling grid cell, not an ancestor of the editor; ancestor walk finds [+] "Add tools" button instead |
+| Hydration wait          | Wait for `[data-lexical-editor]` + 1s delay before searching                  | `waitUntil: 'domcontentloaded'` only           | Model picker button renders only after React hydration; `domcontentloaded` returns too early                              |
+| Opus Max-only handling  | No special handling — Opus IS in picker for all users (lock icon for non-Max) | `PERPLEXITY_MAX_ONLY_MODELS` fail-fast array   | User confirmed Opus is visible but gated, not hidden; wrong to assume hidden                                              |
 
 ### Files Modified
+
 - `src/perplexity-browser/actions/modelSelection.ts` — rewrote `findPickerButton()`: hydration wait + page-wide search excluding [+] button; removed `PERPLEXITY_MAX_ONLY_MODELS` import and fail-fast; removed `MODEL_PICKER_BUTTON_TEXTS` import (unused)
 - `src/perplexity-browser/constants.ts` — removed `PERPLEXITY_MAX_ONLY_MODELS` (was added and reverted in same session)
 
 ### Session Export
+
 - Full history: .sessions/260309-1439_fa249bd8/main.md
 
 ### Linear Status
+
 - NAI-114: In Progress — picker button fix verified for Sonnet + Opus, binary compiled, awaiting user's manual Opus test then PR
 
 ### Open / Next
+
 - **User manual test of `ppl/claude-opus-4.6`** — binary compiled, user testing now
 - **Create PR** — branch `feat/nai-114-ppl-prefix-model-routing` has 12 commits, push + `gh pr create` after user confirms
-- **CLAUDE.md** — `.claude/CLAUDE.md` is gitignored; ppl/* routing docs not in checked-in version
+- **CLAUDE.md** — `.claude/CLAUDE.md` is gitignored; ppl/\* routing docs not in checked-in version
