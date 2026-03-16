@@ -15,7 +15,7 @@ import type {
   ResponseOutputItem,
 } from "./types.js";
 
-const MODEL_ID_MAP: Record<ModelName, string> = {
+const MODEL_ID_MAP: Partial<Record<ModelName, string>> = {
   "gemini-3.1-pro": "gemini-3.1-pro-preview",
   "gemini-3-pro": "gemini-3-pro-preview",
   "gpt-5.4": "gpt-5.4",

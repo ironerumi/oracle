@@ -18,7 +18,9 @@ import type {
 } from "./types.js";
 import { createGeminiClient } from "./gemini.js";
 import { createClaudeClient } from "./claude.js";
-import { isOpenRouterBaseUrl } from "./modelResolver.js";
+import { createPerplexityClient } from "./perplexity.js";
+import { isOpenRouterBaseUrl, isKnownModel } from "./modelResolver.js";
+import { MODEL_CONFIGS } from "./config.js";
 
 /**
  * Known native API base URLs that should still use their dedicated SDKs.
@@ -61,6 +63,12 @@ export function createDefaultClientFactory(): ClientFactory {
       httpTimeoutMs?: number;
     },
   ): ClientLike => {
+    // Route Perplexity first — it has its own SDK, must not be captured by proxy logic
+    const knownConfig = options?.model && isKnownModel(options.model) ? MODEL_CONFIGS[options.model] : undefined;
+    if (knownConfig?.provider === "perplexity" && options?.model) {
+      return createPerplexityClient(key, options.model, options.resolvedModelId, options.baseUrl);
+    }
+
     const openRouter = isOpenRouterBaseUrl(options?.baseUrl);
     const customProxy = isCustomBaseUrl(options?.baseUrl);
 
@@ -69,7 +77,6 @@ export function createDefaultClientFactory(): ClientFactory {
     // which would reject the proxy's API key.
     if (!openRouter && !customProxy) {
       if (options?.model?.startsWith("gemini")) {
-        // Gemini client uses its own SDK; allow passing the already-resolved id for transparency/logging.
         return createGeminiClient(key, options.model, options.resolvedModelId);
       }
       if (options?.model?.startsWith("claude")) {

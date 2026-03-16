@@ -14,7 +14,17 @@ export type KnownModelName =
   | "gemini-3-pro"
   | "claude-4.5-sonnet"
   | "claude-4.1-opus"
-  | "grok-4.1";
+  | "grok-4.1"
+  | "ppl/sonar"
+  | "ppl/sonar-pro"
+  | "ppl/sonar-reasoning-pro"
+  | "ppl/sonar-deep-research"
+  | "ppl/best"
+  | "ppl/gpt-5.4"
+  | "ppl/gemini-3.1-pro"
+  | "ppl/claude-sonnet-4.6"
+  | "ppl/claude-opus-4.6"
+  | "ppl/kimi-k2.5";
 
 // ModelName now allows arbitrary strings so OpenRouter / custom IDs can pass through.
 export type ModelName = KnownModelName | (string & {});
@@ -53,7 +63,7 @@ export interface ModelConfig {
   /** Provider-specific model id used for API calls (defaults to `model`). */
   apiModel?: string;
   /** Upstream provider to help with OpenRouter mapping and auth precedence. */
-  provider?: "openai" | "anthropic" | "google" | "xai" | "other";
+  provider?: "openai" | "anthropic" | "google" | "xai" | "perplexity" | "other";
   /** Explicit OpenRouter model id when it differs from apiModel/model. */
   openRouterId?: string;
   tokenizer: TokenizerFn;

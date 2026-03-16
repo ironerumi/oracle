@@ -195,8 +195,13 @@ function isGeminiDeepThinkAlias(normalized: string): boolean {
   );
 }
 
+const REMOVED_SONAR = ["sonar", "sonar-pro", "sonar-reasoning-pro", "sonar-deep-research"];
+
 export function resolveApiModel(modelValue: string): ModelName {
   const normalized = normalizeModelOption(modelValue).toLowerCase();
+  if (REMOVED_SONAR.includes(normalized)) {
+    throw new Error(`Model '${normalized}' moved to 'ppl/${normalized}'. Update your --model flag.`);
+  }
   if (normalized in MODEL_CONFIGS) {
     return normalized as ModelName;
   }
@@ -267,7 +272,14 @@ export function inferModelFromLabel(modelValue: string): ModelName {
   if (!normalized) {
     return DEFAULT_MODEL;
   }
+  if (REMOVED_SONAR.includes(normalized)) {
+    throw new Error(`Model '${normalized}' moved to 'ppl/${normalized}'. Update your --model flag.`);
+  }
   if (normalized in MODEL_CONFIGS) {
+    return normalized as ModelName;
+  }
+  // ppl/* models: return as-is (they're known configs or passthrough)
+  if (normalized.startsWith("ppl/")) {
     return normalized as ModelName;
   }
   if (normalized.includes("/")) {

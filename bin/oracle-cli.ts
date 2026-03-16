@@ -3,6 +3,7 @@ import "dotenv/config";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { once } from "node:events";
+import nodePath from "node:path";
 import { Command, Option } from "commander";
 import type { OptionValues } from "commander";
 // Allow `npx @steipete/oracle oracle-mcp` to resolve the MCP server even though npx runs the default binary.
@@ -11,7 +12,7 @@ if (process.argv[2] === "oracle-mcp") {
   await startMcpServer();
   process.exit(0);
 }
-import { resolveEngine, type EngineMode, defaultWaitPreference } from "../src/cli/engine.js";
+import { resolveEngine, isBrowserCompatible, type EngineMode, defaultWaitPreference } from "../src/cli/engine.js";
 import { shouldRequirePrompt } from "../src/cli/promptRequirement.js";
 import chalk from "chalk";
 import type { SessionMetadata, SessionMode, BrowserSessionConfig } from "../src/sessionStore.js";
@@ -19,15 +20,17 @@ import { sessionStore, pruneOldSessions } from "../src/sessionStore.js";
 import {
   DEFAULT_MODEL,
   MODEL_CONFIGS,
+  runOracle,
   readFiles,
   estimateRequestTokens,
   buildRequestBody,
 } from "../src/oracle.js";
-import { isKnownModel } from "../src/oracle/modelResolver.js";
+import { isKnownModel, isPerplexityModel } from "../src/oracle/modelResolver.js";
 import type { ModelName, PreviewMode, RunOracleOptions } from "../src/oracle.js";
-import { CHATGPT_URL } from "../src/browserMode.js";
+import { CHATGPT_URL, normalizeChatgptUrl } from "../src/browserMode.js";
 import { createRemoteBrowserExecutor } from "../src/remote/client.js";
 import { createGeminiWebExecutor } from "../src/gemini-web/index.js";
+import { createPerplexityBrowserExecutor } from "../src/perplexity-browser/index.js";
 import { applyHelpStyling } from "../src/cli/help.js";
 import {
   collectPaths,
@@ -157,6 +160,7 @@ interface CliOptions extends OptionValues {
   output?: string;
   aspect?: string;
   geminiShowThoughts?: boolean;
+  space?: string;
   copyMarkdown?: boolean;
   copy?: boolean;
   verbose?: boolean;
@@ -300,7 +304,7 @@ program
   .option("-s, --slug <words>", "Custom session slug (3-5 words).")
   .option(
     "-m, --model <model>",
-    'Model to target (gpt-5.4-pro default). Also gpt-5.4, gpt-5.1-pro, gpt-5-pro, gpt-5.1, gpt-5.1-codex API-only, gpt-5.2, gpt-5.2-instant, gpt-5.2-pro, gemini-3.1-pro API-only, gemini-3-pro, claude-4.5-sonnet, claude-4.1-opus, or ChatGPT labels like "5.2 Thinking" for browser runs).',
+    'Model to target (gpt-5.4-pro default). Also gpt-5.4, gpt-5.1-pro, gpt-5-pro, gpt-5.1, gpt-5.1-codex API-only, gpt-5.2, gpt-5.2-instant, gpt-5.2-pro, gemini-3.1-pro API-only, gemini-3-pro, claude-4.5-sonnet, claude-4.1-opus, ppl/sonar, ppl/sonar-pro, ppl/sonar-reasoning-pro, ppl/sonar-deep-research, or ChatGPT labels like "5.2 Thinking" for browser runs).',
     normalizeModelOption,
   )
   .addOption(
@@ -669,6 +673,7 @@ program
       "Display Gemini thinking process (Gemini web/cookie mode only).",
     ).default(false),
   )
+  .addOption(new Option("--space <slug>", "Perplexity Space slug or URL for query context (Perplexity browser mode only)."))
   .option(
     "--retain-hours <hours>",
     "Prune stored sessions older than this many hours before running (set 0 to disable).",
@@ -978,6 +983,15 @@ export function enforceBrowserSearchFlag(
     logFn(chalk.dim("Note: search is not available in browser engine; ignoring search=false."));
     runOptions.search = undefined;
   }
+}
+
+/** Resolve the inline cookies file path for write-back (auto-refresh). */
+function resolveCookieFilePath(options: ResolvedCliOptions): string | null {
+  const explicit = options.browserInlineCookiesFile ?? process.env.ORACLE_BROWSER_COOKIES_FILE;
+  if (explicit) {
+    return nodePath.isAbsolute(explicit) ? explicit : nodePath.resolve(explicit);
+  }
+  return null;
 }
 
 function resolveHeartbeatIntervalMs(seconds: number | undefined): number | undefined {
@@ -1303,11 +1317,16 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     throw new Error("--dry-run cannot be combined with --render-markdown.");
   }
 
+  // Resolve model first so engine selection can consider provider-specific keys (e.g., PERPLEXITY_API_KEY)
+  if (optionUsesDefault('model') && userConfig.model) {
+    options.model = userConfig.model;
+  }
   const preferredEngine = options.engine ?? userConfig.engine;
   let engine: EngineMode = resolveEngine({
     engine: preferredEngine,
     browserFlag: options.browser,
     env: process.env,
+    model: options.model,
   });
   if (options.browser) {
     console.log(chalk.yellow("`--browser` is deprecated; use `--engine browser` instead."));
@@ -1369,11 +1388,10 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       : resolveApiModel(cliModelArg || DEFAULT_MODEL);
   const primaryModelCandidate = normalizedMultiModels[0] ?? resolvedModelCandidate;
   const isGemini = primaryModelCandidate.startsWith("gemini");
+  const isPerplexity = isPerplexityModel(primaryModelCandidate);
   const isCodex = primaryModelCandidate.startsWith("gpt-5.1-codex");
   const isClaude = primaryModelCandidate.startsWith("claude");
   const userForcedBrowser = options.browser || options.engine === "browser";
-  const isBrowserCompatible = (model: string) =>
-    model.startsWith("gpt-") || model.startsWith("gemini");
   const hasNonBrowserCompatibleTarget =
     (engine === "browser" || userForcedBrowser) &&
     (normalizedMultiModels.length > 0
@@ -1381,7 +1399,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       : !isBrowserCompatible(resolvedModelCandidate));
   if (hasNonBrowserCompatibleTarget) {
     throw new Error(
-      "Browser engine only supports GPT and Gemini models. Re-run with --engine api for Grok, Claude, or other models.",
+      "Browser engine only supports GPT, Gemini, and Perplexity (ppl/*) models. Re-run with --engine api for Grok, Claude, or other models.",
     );
   }
   if (isClaude && engine === "browser") {
@@ -1393,10 +1411,24 @@ async function runRootCommand(options: CliOptions): Promise<void> {
     engine = "api";
   }
   if (normalizedMultiModels.length > 0) {
+    const hasPplModel = normalizedMultiModels.some((m) => m.startsWith("ppl/")) || primaryModelCandidate.startsWith("ppl/");
+    if (hasPplModel) {
+      throw new Error(
+        "Perplexity models (ppl/*) cannot be used with --models. " +
+        "Browser executor supports a single model only.",
+      );
+    }
     engine = "api";
   }
   if (remoteHost && normalizedMultiModels.length > 0) {
     throw new Error("--remote-host does not support --models yet. Use API engine locally instead.");
+  }
+  if (options.space && !isPerplexity) {
+    throw new Error('--space is only supported with Perplexity models (ppl/*).');
+  }
+  // --space forces browser engine for ppl/* models (overrides API preference)
+  if (options.space && isPerplexity && engine === 'api') {
+    engine = 'browser';
   }
   const resolvedModel: ModelName =
     normalizedMultiModels[0] ?? (isGemini ? resolveApiModel(cliModelArg) : resolvedModelCandidate);
@@ -1418,7 +1450,7 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       ? (MODEL_CONFIGS[resolvedModel].apiModel ?? resolvedModel)
       : resolvedModel;
   const resolvedBaseUrl = normalizeBaseUrl(
-    options.baseUrl ?? (isClaude ? process.env.ANTHROPIC_BASE_URL : process.env.OPENAI_BASE_URL),
+    options.baseUrl ?? (isPerplexity ? undefined : isClaude ? process.env.ANTHROPIC_BASE_URL : process.env.OPENAI_BASE_URL),
   );
   const { models: _rawModels, ...optionsWithoutModels } = options;
   const resolvedOptions: ResolvedCliOptions = { ...optionsWithoutModels, model: resolvedModel };
@@ -1651,6 +1683,17 @@ async function runRootCommand(options: CliOptions): Promise<void> {
       executeBrowser: createRemoteBrowserExecutor({ host: remoteHost, token: remoteToken }),
     };
     console.log(chalk.dim(`Routing browser automation to remote host ${remoteHost}`));
+  } else if (browserConfig && isPerplexity) {
+    browserDeps = {
+      executeBrowser: createPerplexityBrowserExecutor(browserConfig, {
+        space: options.space,
+        cookieFilePath: resolveCookieFilePath(options),
+      }),
+    };
+    console.log(chalk.dim("Using Perplexity browser engine for automation"));
+    if (options.space) {
+      console.log(chalk.dim(`Perplexity Space: ${options.space}`));
+    }
   } else if (browserConfig && resolvedModel.startsWith("gemini")) {
     browserDeps = {
       executeBrowser: createGeminiWebExecutor({

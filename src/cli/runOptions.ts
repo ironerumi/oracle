@@ -2,7 +2,7 @@ import type { RunOracleOptions, ModelName } from "../oracle.js";
 import { DEFAULT_MODEL, MODEL_CONFIGS } from "../oracle.js";
 import type { UserConfig } from "../config.js";
 import type { EngineMode } from "./engine.js";
-import { resolveEngine } from "./engine.js";
+import { resolveEngine, isBrowserCompatible } from "./engine.js";
 import {
   normalizeModelOption,
   inferModelFromLabel,
@@ -13,6 +13,7 @@ import { resolveGeminiModelId } from "../oracle/gemini.js";
 import { PromptValidationError } from "../oracle/errors.js";
 import { normalizeChatGptModelForBrowser } from "./browserConfig.js";
 import { resolveConfiguredMaxFileSizeBytes } from "./fileSize.js";
+import { isPerplexityModel } from "../oracle/modelResolver.js";
 
 export interface ResolveRunOptionsInput {
   prompt: string;
@@ -39,7 +40,9 @@ export function resolveRunOptionsFromConfig({
   userConfig,
   env = process.env,
 }: ResolveRunOptionsInput): ResolvedRunOptions {
-  const resolvedEngine = resolveEngineWithConfig({ engine, configEngine: userConfig?.engine, env });
+  // Resolve model early so engine can consider provider-specific keys (e.g., PERPLEXITY_API_KEY)
+  const cliModelArg = normalizeModelOption(model ?? userConfig?.model) || DEFAULT_MODEL;
+  const resolvedEngine = resolveEngineWithConfig({ engine, configEngine: userConfig?.engine, env, model: cliModelArg });
   const browserRequested = engine === "browser";
   const browserConfigured = userConfig?.engine === "browser";
   const requestedModelList = Array.isArray(models) ? models : [];
@@ -47,7 +50,6 @@ export function resolveRunOptionsFromConfig({
     .map((entry) => normalizeModelOption(entry))
     .filter(Boolean);
 
-  const cliModelArg = normalizeModelOption(model ?? userConfig?.model) || DEFAULT_MODEL;
   const inferredModel =
     resolvedEngine === "browser" && normalizedRequestedModels.length === 0
       ? inferModelFromLabel(cliModelArg)
@@ -72,12 +74,11 @@ export function resolveRunOptionsFromConfig({
       { engine: "browser", models: allModels },
     );
   }
-  const isBrowserCompatible = (m: string) => m.startsWith("gpt-") || m.startsWith("gemini");
   const hasNonBrowserCompatibleTarget =
     (browserRequested || browserConfigured) && allModels.some((m) => !isBrowserCompatible(m));
   if (hasNonBrowserCompatibleTarget) {
     throw new PromptValidationError(
-      "Browser engine only supports GPT and Gemini models. Re-run with --engine api for Grok, Claude, or other models.",
+      "Browser engine only supports GPT, Gemini, and Perplexity (ppl/*) models. Re-run with --engine api for Grok, Claude, or other models.",
       { engine: "browser", models: allModels },
     );
   }
@@ -99,9 +100,11 @@ export function resolveRunOptionsFromConfig({
     userConfig?.heartbeatSeconds !== undefined ? userConfig.heartbeatSeconds * 1000 : 30_000;
   const maxFileSizeBytes = resolveConfiguredMaxFileSizeBytes(userConfig, env);
 
+  // Perplexity models should NOT inherit OPENAI_BASE_URL - run.ts fills from PERPLEXITY_BASE_URL
+  const isPerplexity = isPerplexityModel(resolvedModel);
   const baseUrl = normalizeBaseUrl(
     userConfig?.apiBaseUrl ??
-      (isClaude ? env.ANTHROPIC_BASE_URL : isGrok ? env.XAI_BASE_URL : env.OPENAI_BASE_URL),
+      (isPerplexity ? undefined : isClaude ? env.ANTHROPIC_BASE_URL : isGrok ? env.XAI_BASE_URL : env.OPENAI_BASE_URL),
   );
   const uniqueMultiModels: ModelName[] = normalizedRequestedModels.length > 0 ? allModels : [];
   const includesCodexMultiModel = uniqueMultiModels.some((entry) =>
@@ -135,10 +138,12 @@ function resolveEngineWithConfig({
   engine,
   configEngine,
   env,
+  model,
 }: {
   engine?: EngineMode;
   configEngine?: EngineMode;
   env: NodeJS.ProcessEnv;
+  model?: string;
 }): EngineMode {
   if (engine) return engine;
   const envOverride = (env.ORACLE_ENGINE ?? "").trim().toLowerCase();
@@ -146,7 +151,7 @@ function resolveEngineWithConfig({
     return envOverride as EngineMode;
   }
   if (configEngine) return configEngine;
-  return resolveEngine({ engine: undefined, env });
+  return resolveEngine({ engine: undefined, env, model });
 }
 
 function resolveEffectiveModelId(model: ModelName): string {

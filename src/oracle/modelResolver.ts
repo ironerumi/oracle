@@ -209,6 +209,10 @@ export async function resolveModelConfig(
   };
 }
 
+export function isPerplexityModel(model: string): boolean {
+  return isKnownModel(model) && MODEL_CONFIGS[model].provider === 'perplexity';
+}
+
 export function isProModel(model: ModelName): boolean {
   return isKnownModel(model) && PRO_MODELS.has(model as KnownModelName & ProModelName);
 }
