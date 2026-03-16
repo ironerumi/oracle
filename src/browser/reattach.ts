@@ -60,6 +60,13 @@ export async function resumeBrowserSession(
     (async (runtimeMeta, configMeta) =>
       resumeBrowserSessionViaNewChrome(runtimeMeta, configMeta, logger, deps));
 
+  // Perplexity browser sessions don't support reattach (separate executor, no conversation continuity)
+  if (config?.url?.includes('perplexity.ai')) {
+    throw new Error(
+      'Reattach is not supported for Perplexity browser sessions. Start a new run instead.',
+    );
+  }
+
   if (!runtime.chromePort) {
     logger("No running Chrome detected; reopening browser to locate the session.");
     return recoverSession(runtime, config);

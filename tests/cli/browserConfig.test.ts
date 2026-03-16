@@ -198,6 +198,31 @@ describe("buildBrowserConfig", () => {
   });
 });
 
+describe("Perplexity model labels", () => {
+  // Perplexity desiredModel stores the raw model name — the Perplexity executor
+  // derives the browser label internally via PERPLEXITY_MODEL_LABELS.
+  // This differs from ChatGPT models, which store the browser label directly.
+  test("stores raw sonar model name (executor derives label)", async () => {
+    const config = await buildBrowserConfig({ model: "ppl/sonar" });
+    expect(config.desiredModel).toBe("ppl/sonar");
+  });
+
+  test("stores raw sonar-pro model name", async () => {
+    const config = await buildBrowserConfig({ model: "ppl/sonar-pro" });
+    expect(config.desiredModel).toBe("ppl/sonar-pro");
+  });
+
+  test("stores raw sonar-reasoning-pro model name", async () => {
+    const config = await buildBrowserConfig({ model: "ppl/sonar-reasoning-pro" });
+    expect(config.desiredModel).toBe("ppl/sonar-reasoning-pro");
+  });
+
+  test("stores raw sonar-deep-research model name", async () => {
+    const config = await buildBrowserConfig({ model: "ppl/sonar-deep-research" });
+    expect(config.desiredModel).toBe("ppl/sonar-deep-research");
+  });
+});
+
 describe("resolveBrowserModelLabel", () => {
   test("returns canonical ChatGPT label when CLI value matches API model", () => {
     expect(resolveBrowserModelLabel("gpt-5.4-pro", "gpt-5.4-pro")).toBe("GPT-5.4 Pro");
