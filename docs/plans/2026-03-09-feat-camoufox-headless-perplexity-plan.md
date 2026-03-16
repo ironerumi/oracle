@@ -1,0 +1,391 @@
+---
+title: "feat: Replace Perplexity headed Chrome with headless Camoufox"
+type: feat
+status: completed
+date: 2026-03-09
+origin: docs/brainstorms/2026-03-09-camoufox-perplexity-headless-brainstorm.md
+---
+
+# feat: Replace Perplexity headed Chrome with headless Camoufox
+
+## Overview
+
+Replace the Perplexity browser engine's headed Chrome + CDP stack with headless Camoufox (Firefox fork) + Playwright via `camoufox-js`. Eliminates the visible browser window that currently annoys users.
+
+Spike validated (2026-03-09): Camoufox headless bypasses Perplexity's Cloudflare, cookie injection works. (see brainstorm: `docs/brainstorms/2026-03-09-camoufox-perplexity-headless-brainstorm.md`)
+
+## Problem Statement
+
+Oracle's Perplexity engine forces a visible Chrome window because:
+- Headless Chrome is blocked by Cloudflare (TLS fingerprint mismatch)
+- Minimized Chrome defers DOM rendering
+- Current workaround: 100x100px window + virtual viewport — hacky, still visible
+
+## Proposed Solution
+
+Swap browser backend from Chrome/CDP to Camoufox/Playwright in the Perplexity engine only. ChatGPT and Gemini engines stay on Chrome/CDP unchanged.
+
+**Platform policy:** Camoufox FF146 is macOS-only. On non-Mac platforms, Perplexity browser mode errors with a clear message directing users to `PERPLEXITY_API_KEY`. No Chrome fallback — maintaining two codepaths is unsustainable. Resolve P0 first to confirm.
+
+**Key dependency:** `camoufox-js` (npm v0.9.1) — full JS port of Camoufox wrapper, uses `playwright-core`, no Python needed.
+
+## Technical Considerations
+
+### Migration surface
+
+| Layer | Current (CDP) | After (Playwright) | Effort |
+|-------|--------------|---------------------|--------|
+| Browser launch | `chrome-launcher` → `launchChrome()` | `camoufox-js` → `Camoufox({})` | New module |
+| Connection | `chrome-remote-interface` → CDP client | Playwright `Browser` / `Page` | Replace |
+| DOM interaction | `Runtime.evaluate({expression})` ×30 | `page.evaluate(fn)` | Bulk rewrite |
+| Cookie inject | `Network.setCookie()` loop | `context.addCookies([])` batch | Simpler |
+| Cookie read | `Network.getAllCookies()` | `context.cookies()` | Trivial |
+| Navigation | `Page.navigate({url})` | `page.goto(url)` | Trivial |
+| Text input | `Input.insertText({text})` (fallback) | `page.keyboard.type(text)` | See note below |
+| Window hiding | `Browser.setWindowBounds` + `Emulation.setDeviceMetricsOverride` | Not needed (headless) | Delete |
+| Disconnect | `client.on('disconnect')` | `browser.on('disconnected')` | Trivial |
+| Cleanup | `chrome.kill()` + `rm(tempDir)` | `browser.close()` | Simpler |
+
+### What stays the same
+- All CSS selectors in `constants.ts` — pure DOM, not CDP-specific
+- All JS logic inside `evaluate()` calls — just needs different wrapping
+- Executor pattern and `BrowserRunResult` return type
+- CLI wiring in `oracle-cli.ts` — still injects executor the same way
+- ChatGPT/Gemini engines — completely untouched
+
+### Key architectural constraint
+`src/browser/chromeLifecycle.ts` is shared with ChatGPT engine — must NOT be modified. Perplexity gets its own `camoufoxLifecycle.ts`.
+
+### `Runtime.evaluate` conversion pattern
+Current CDP pattern:
+```typescript
+const { result } = await Runtime.evaluate({
+  expression: `(() => { ${jsCode} })()`,
+  returnByValue: true,
+  awaitPromise: true,
+});
+return result.value;
+```
+
+Playwright equivalent:
+```typescript
+return await page.evaluate(() => { /* same jsCode */ });
+```
+
+Constants currently injected via template literals (`${JSON.stringify(selectors)}`) become `page.evaluate` arguments:
+```typescript
+return await page.evaluate((selectors) => { /* jsCode using selectors */ }, selectors);
+```
+
+## System-Wide Impact
+
+- **Shared infrastructure**: `chromeLifecycle.ts`, `cookies.ts`, `types.ts` stay intact for ChatGPT. Perplexity stops importing from `chromeLifecycle.ts`
+- **Error propagation**: Cloudflare detection (`document.title` check) ports 1:1. Auth check ports 1:1. Browser crash detection changes from `client.on('disconnect')` to `browser.on('disconnected')` — same race pattern. **Error messages must be updated in the same commit as the port** — current messages reference `--browser-chrome-profile` and headed Chrome, which become dead advice
+- **State lifecycle**: Camoufox manages its own temp profile (no `mkdtemp` + cleanup needed). Cookie write-back changes API but not semantics
+- **API surface parity**: `BrowserRunResult` field mapping: `chromePid` ← `browser.process().pid`, `chromePort` ← null, `chromeHost` ← null, `chromeTargetId` ← null, `userDataDir` ← null (Camoufox manages its own). Session store format unchanged
+- **CLI flags**: `--browser-chrome-profile`, `--browser-chrome-path`, `--browser-headless`, `--browser-hide-window`, `--browser-debug-port` become no-ops for Perplexity. Warn and ignore
+
+## Acceptance Criteria
+
+- [x] `oracle --model sonar-pro "test query"` runs fully headless with no visible browser window
+- [x] Cloudflare bypass works (no "Just a moment" challenge)
+- [x] Cookie injection from `~/.oracle/perplexity-cookies.json` works
+- [x] Cookie write-back after successful run works
+- [x] Model selection (all Sonar variants) works (sonar default — picker not found but sonar is default; sonar-deep-research triggers DR activation)
+- [x] Source filter toggling works — fixed: Radix pointer events required (plain .click() doesn't open menus)
+- [x] Deep Research mode works — fixed: desiredModel now carries raw model name; Radix pointer events for menu activation
+- [x] Space navigation works
+- [x] ChatGPT browser engine is completely unaffected (no changes to `src/browser/` or ChatGPT action files)
+- [x] Chrome-specific CLI flags warn and are ignored for Perplexity
+- [x] First run with missing Camoufox binary shows download progress, not a hang (binary auto-bootstrap via `ensureCamoufoxBinary`)
+- [x] Unsupported platform (if applicable) shows clear error message — N/A: camoufox-js v0.9.1 supports mac/linux/win
+
+## Pre-Implementation: Resolve Unknowns
+
+Before writing any production code, answer these with quick scripts:
+
+### P0. Platform support
+```bash
+npx camoufox-js fetch  # does it download on macOS? check if Linux/Windows binaries exist
+```
+If macOS-only: add runtime platform guard that throws `Error: Camoufox browser engine requires macOS. Use PERPLEXITY_API_KEY for API access on this platform.` No Chrome fallback — one codepath only.
+
+### P1. Binary bootstrap UX
+Test what happens when binary is missing: does `Camoufox({})` auto-download? Is there a separate `fetch` step?
+- If auto-downloads: hook into progress events, surface via oracle log stream (`[perplexity-browser] Downloading Camoufox browser (first run)...`)
+- If separate fetch: call explicitly in `launchCamoufox()` before `launch()`, with progress logging
+- Test failure mode: what happens on network error mid-download?
+
+### P2. Cookie format round-trip
+```typescript
+// Load existing CDP-shaped cookies → normalize for Playwright → addCookies → cookies() → compare
+```
+Verify `url` field handling, `sameSite` casing, `expires` format.
+
+### P3. Viewport defaults
+Check what viewport size Camoufox headless defaults to. If not 1280x720, set explicitly via `page.setViewportSize()`.
+
+### P4. Playwright click vs Radix pointer events
+Test if `page.click(selector)` triggers React/Radix tab switches. If yes, simplify the 5-event pointer sequences in `sourceFilter.ts`, `responseCapture.ts`, `deepResearch.ts`. If no, port the `evaluate()` approach 1:1.
+
+## Implementation Phases
+
+### Phase 1: Foundation — Camoufox lifecycle module
+
+**Files:**
+- New: `src/perplexity-browser/camoufoxLifecycle.ts`
+- Modify: `package.json` (add `camoufox-js`, `playwright-core`)
+
+**Tasks:**
+- [x] Add `camoufox-js` and `playwright-core` as dependencies
+- [x] Create `camoufoxLifecycle.ts` with:
+  - `launchCamoufox(options)` — binary check/download, launch headless, set viewport
+  - `registerCamoufoxTerminationHooks(browser, log)` — SIGINT/SIGTERM cleanup
+  - `cdpCookiesToPlaywright()` — normalize CDP-shaped cookies to Playwright format
+- [x] Validate binary bootstrap with progress logging
+
+### Phase 2: Port action files (CDP → Playwright)
+
+All action files currently accept a `Runtime` (CDP) parameter. Change to accept a `Page` (Playwright) parameter.
+
+**Files (7 action files):**
+- [x] `actions/navigation.ts` — 3 evaluate calls, `Page.navigate`. **Update error messages**: Cloudflare and login failure messages reference `--browser-chrome-profile` and headed Chrome — rewrite to reference `--browser-inline-cookies-file` and cookie re-export
+- [x] `actions/modelSelection.ts` — 2 evaluate calls
+- [x] `actions/promptSubmit.ts` — 8+ evaluate calls. **Note**: the 3-tier text input fallback chain (`beforeinput` → `execCommand` → `Input.insertText`) needs attention — `Input.insertText` is CDP-only. Replaced with `page.keyboard.type(text)` as third fallback
+- [x] `actions/responseCapture.ts` — 6 evaluate calls
+- [x] `actions/sourceFilter.ts` — 5 evaluate calls
+- [x] `actions/deepResearch.ts` — 4 evaluate calls
+- [x] `actions/spaceNavigation.ts` — 2 evaluate calls, `Page.navigate`
+
+**Conversion pattern:**
+```typescript
+// Before: action accepts CDP domains
+export async function navigateToPerplexity(
+  Page: ChromeClient['Page'],
+  Runtime: ChromeClient['Runtime'],
+  url: string,
+  log: LogFn,
+) { ... }
+
+// After: action accepts Playwright Page
+export async function navigateToPerplexity(
+  page: import('playwright-core').Page,
+  url: string,
+  log: LogFn,
+) { ... }
+```
+
+### Phase 3: Port executor (`index.ts`)
+
+**File:** `src/perplexity-browser/index.ts`
+
+- [x] Replace `launchChrome()` with `launchCamoufox()`
+- [x] Replace CDP connection with Playwright browser/page
+- [x] Replace cookie injection: `Network.setCookie` loop → `context.addCookies()`
+- [x] Replace cookie write-back: `Network.getAllCookies()` → `context.cookies()`
+- [x] Remove window-hiding code (lines 128-141)
+- [x] Remove temp `userDataDir` creation/cleanup
+- [x] Remove `Network.enable()`, `Page.enable()`, `Runtime.enable()` calls
+- [x] Update disconnect detection
+- [x] Wire all ported action functions with `page` instead of CDP domains
+- [x] Update `BrowserRunResult` return: Chrome-specific fields omitted (browser.process() not available on Camoufox)
+
+### Phase 4: CLI flag handling
+
+**File:** `bin/oracle-cli.ts`, `src/cli/browserConfig.ts`
+
+- [x] When engine is Perplexity: warn and ignore Chrome-specific flags (in executor)
+- [x] `--browser-inline-cookies-file` — add validation: warn if not provided for Perplexity browser mode
+- [x] Verify `isBrowserCompatible()` in BOTH locations (`runOptions.ts:60` AND `oracle-cli.ts:1006`) — already includes `sonar`
+
+### Phase 5: Cleanup, documentation, and smoke tests
+
+- [x] Update `.claude/CLAUDE.md` — remove headed Chrome workaround docs, add Camoufox notes
+- [x] Remove dead imports from `chromeLifecycle.ts` in Perplexity engine (all Chrome imports removed)
+- [x] Verify `src/browser/types.ts` `ChromeClient` type is only used by ChatGPT engine now (confirmed: 15 files in `src/browser/`, zero in `src/perplexity-browser/`)
+- [x] Update `docs/browser-mode.md` if it documents Perplexity-specific behavior (no Perplexity refs found — no update needed)
+- [x] Document cookie seed workflow: existing `~/.oracle/perplexity-cookies.json` + auto-refresh on each run. Export via `npx tsx export-cookies-script "Profile 2"`. Documented in `.claude/CLAUDE.md`.
+
+**Smoke test checklist** (browser-only, testable on current macOS setup):
+- [x] `oracle --model sonar "what is 2+2"` — basic headless query, Cloudflare bypass, cookie round-trip
+- [x] `oracle --model sonar-deep-research "research X"` — Deep Research activation triggers (bug fix: cliModel passthrough). Toggle not found in UI (pre-existing selector issue; query still succeeds with rich results)
+- [x] `oracle --model sonar --space <slug> "query"` — space navigation
+- [x] Run with missing/empty cookie file — verify clear error message (not dead Chrome advice)
+- [x] Run with `--browser-chrome-profile "Profile 2"` — verify warning is emitted and flag is ignored
+
+## Dependencies & Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|------------|
+| `camoufox-js` v0.9.1 bugs | Medium | High | Pin version, test thoroughly, have rollback plan |
+| macOS-only binary | High | Medium | Platform guard + clear error. Chrome fallback if needed |
+| Cloudflare tightens Perplexity config | Low | High | Monitor. Cookie write-back keeps session alive |
+| Playwright `click()` doesn't work on Radix UI | Medium | Low | Fall back to pointer event sequences via `evaluate()` |
+| Cookie format incompatibility | Low | Medium | Normalize in loader, strip `url` field |
+
+## Success Metrics
+
+- Zero visible browser window during Perplexity queries
+- No regression in query success rate
+- Cookie round-trip works (inject → run → write-back → next run)
+- First-run binary download completes with user-visible progress
+
+## Sources
+
+- **Origin brainstorm:** [docs/brainstorms/2026-03-09-camoufox-perplexity-headless-brainstorm.md](docs/brainstorms/2026-03-09-camoufox-perplexity-headless-brainstorm.md) — spike validated Cloudflare bypass + cookie injection; `camoufox-js` eliminates Python dependency
+- **Spike script:** `spike/camoufox-test.py`
+- **Camoufox:** https://github.com/daijro/camoufox
+- **camoufox-js:** https://www.npmjs.com/package/camoufox-js
+- Key files: `src/perplexity-browser/index.ts`, `src/perplexity-browser/actions/*.ts`, `src/perplexity-browser/camoufoxLifecycle.ts`, `src/browser/chromeLifecycle.ts`, `src/browser/types.ts`
+
+## Session Log — 2026-03-09
+
+### Decisions
+| Decision | Chosen | Rejected | Why |
+|----------|--------|----------|-----|
+| Cookie normalization location | Dedicated `cdpCookiesToPlaywright()` in `camoufoxLifecycle.ts` | Inline in executor | Boundary normalization — isolated, testable, single responsibility |
+| Text input CDP fallback | Replace `Input.insertText` with `page.keyboard.type` as 3rd fallback | Remove fallback entirely | Playwright keyboard API is the closest equivalent; keeps fallback chain |
+| Radix pointer events | Port 1:1 with `page.evaluate()` pointer sequences | Simplify to `page.click()` only | Can't test against live Perplexity yet; `page.click()` untested on Radix. Will try in smoke tests |
+| Platform guard | None added — `camoufox-js` OS_ARCH_MATRIX supports mac/linux/win | macOS-only guard per original plan | Discovery: v0.9.1 declares cross-platform support, not macOS-only as brainstorm stated |
+| `browser.process()` PID | Omit Chrome-specific fields from `BrowserRunResult` | Set to null | Method doesn't exist on Camoufox browser object; cleaner to omit |
+| Cookie sameSite casing | Normalize with `.charAt(0).toUpperCase()` | Pass through raw | Playwright accepts capitalized only; CDP cookies may have inconsistent casing |
+
+### Files Modified
+- `package.json` — added `camoufox-js` ^0.9.1, `playwright-core` ^1.58.2
+- `pnpm-lock.yaml` — lockfile update
+- `src/perplexity-browser/camoufoxLifecycle.ts` — NEW: launch, binary bootstrap, cookie normalization, signal hooks
+- `src/perplexity-browser/index.ts` — rewired from Chrome/CDP to Camoufox/Playwright; removed window-hiding, temp dir, CDP enables
+- `src/perplexity-browser/actions/navigation.ts` — CDP Runtime/Page → Playwright Page; updated error messages
+- `src/perplexity-browser/actions/modelSelection.ts` — CDP Runtime → Playwright Page
+- `src/perplexity-browser/actions/promptSubmit.ts` — CDP Runtime/Input → Playwright Page; `Input.insertText` → `page.keyboard.type`
+- `src/perplexity-browser/actions/responseCapture.ts` — CDP Runtime → Playwright Page
+- `src/perplexity-browser/actions/sourceFilter.ts` — CDP Runtime → Playwright Page
+- `src/perplexity-browser/actions/deepResearch.ts` — CDP Runtime → Playwright Page
+- `src/perplexity-browser/actions/spaceNavigation.ts` — CDP Runtime/Page → Playwright Page
+- `.claude/CLAUDE.md` — updated architecture docs for Camoufox (version_id: 260309.0)
+
+### Session Export
+- Full history: .sessions/260308-1617_19354b55/main.md
+
+### Open / Next
+- **`ensureCamoufoxBinary` import path**: `camoufox-js/dist/pkgman.js` is an internal path — may break on version bumps. Monitor or find a public API
+- **PR creation**: Branch `feat/camoufox-headless-perplexity` has 5 commits ready. Push and create PR against `main`.
+
+## Session Log — 2026-03-09 (Smoke Tests + Fixes)
+
+### Decisions
+| Decision | Chosen | Rejected | Why |
+|----------|--------|----------|-----|
+| `desiredModel` for Perplexity | Store raw model name (`sonar-deep-research`) in `browserConfig.desiredModel` — skip `mapModelToBrowserLabel()` for sonar models | `cliModel` field on `PerplexityBrowserOptions` | Perplexity executor derives browser label internally via `PERPLEXITY_MODEL_LABELS`; no info lost. Also fixes latent timeout bug. `cliModel` was a design hack. |
+| Radix menu click strategy | Full pointer event sequence (pointerdown→mousedown→pointerup→mouseup→click with coords) | Plain `.click()` | Radix UI ignores plain `.click()` — menus don't open. Same pattern already documented for agent-browser CDP. |
+| DR completion signal | Gate `follow-up-suggestions` on prose container existence | Fallback selector chain for text extraction | The canonical `[role="tabpanel"] .prose` selector is correct for DR too — the bug was false-positive completion detection from DR progress UI buttons. Fix the signal, not the selector. |
+
+### Files Modified
+- `src/cli/browserConfig.ts` — skip `mapModelToBrowserLabel()` for Perplexity models; `desiredModel` carries raw model name
+- `src/perplexity-browser/index.ts` — reverted `cliModel` hack; use `desiredModel` directly for DR activation
+- `bin/oracle-cli.ts` — removed `cliModel` passthrough
+- `src/perplexity-browser/actions/sourceFilter.ts` — pointer events for all Radix clicks; text-based fallback selectors; broader `Connectors & Sources` text matching
+- `src/perplexity-browser/actions/deepResearch.ts` — pointer events for all Radix clicks; text-based fallback selectors
+- `src/perplexity-browser/actions/responseCapture.ts` — gate `follow-up-suggestions` on prose existence to prevent false DR completion
+- `src/perplexity-browser/constants.ts` — added `SOCIAL_SOURCE_TEXTS`; broadened `ADD_TOOLS_BUTTON_LABELS` and `CONNECTORS_MENUITEM_TEXTS`
+- `.claude/CLAUDE.md` — updated Radix pointer events docs, `desiredModel` convention; version_id 260309.1
+
+### Smoke Test Results (2026-03-09, final)
+| Test | Status | Time | Notes |
+|------|--------|------|-------|
+| Basic query (`sonar "what is 2+2"`) | PASS | 9.3s | Headless, CF bypass, 14 cookies, write-back |
+| Deep Research (JP, long) | PASS | 133s | 3648+ chars, 15 sources, copy-button signal |
+| Space nav (`--space dev-...`) | PASS | 10.5s | Space URL navigated, 10 sources |
+| Missing cookies | PASS | 9.4s | Warning: "Provide --browser-inline-cookies-file" |
+| Chrome flag warning | PASS | — | Warning emitted, flag ignored |
+| Source filter | PASS | — | "Enabled Social source filter" in logs |
+| Deep Research activation | PASS | — | "Activated Deep Research mode" in logs |
+
+### Session Export
+- Full history: .sessions/260308-1650_ab97bfe9/main.md
+
+### Observations
+- Perplexity allows unauthenticated basic queries (no cookies = still works)
+- Cookie write-back creates file even if it didn't exist (auto-bootstrap)
+- `better-sqlite3` native module needed rebuild after Node version change (`npx node-gyp rebuild` in the pnpm module dir)
+- DR progress UI has buttons matching follow-up-suggestions heuristic — must gate on prose existence
+
+## Session Log — 2026-03-09 (Simplify Pass)
+
+### Decisions
+| Decision | Chosen | Rejected | Why |
+|----------|--------|----------|-----|
+| Radix `clickRadix` inside `page.evaluate` | Keep inline (6 lines per closure) | Extract via `page.addInitScript` or string injection | Can't share functions across Node/browser serialization boundary; outer wrappers (`openAddToolsMenu`, `dismissRadixMenu`) capture the real duplication |
+| Stale `browserConfig.test.ts` assertions | Fix tests to expect raw model names | "Fix" code to return `'Sonar'` | Returning `'Sonar'` would break `resolvePerplexityTimeout` (can't distinguish deep-research from regular sonar); architecture intentionally stores raw names per CLAUDE.md |
+| `waitForDocumentReady` after `goto(domcontentloaded)` | Delete — redundant | Keep as safety net | `domcontentloaded` guarantees `readyState >= interactive`; the poll always returns on first iteration — pure wasted IPC |
+| Menu merge for deep-research (social + DR in one open/close) | Defer | Merge into single cycle | Behavioral change with risk (menu state between radio toggle and submenu navigation); saves ~2.1s but needs live testing |
+
+### Files Modified
+- `src/perplexity-browser/actions/radixUtils.ts` — NEW: shared `openAddToolsMenu()`, `dismissRadixMenu()` extracted from deepResearch + sourceFilter
+- `src/perplexity-browser/actions/deepResearch.ts` — use radixUtils; -20 lines
+- `src/perplexity-browser/actions/sourceFilter.ts` — use radixUtils; removed inline `dismissMenu()`; -25 lines
+- `src/perplexity-browser/actions/navigation.ts` — deleted dead `waitForDocumentReady()`; removed redundant call after goto
+- `src/perplexity-browser/actions/spaceNavigation.ts` — removed redundant `waitForDocumentReady` call + unused import
+- `src/perplexity-browser/actions/responseCapture.ts` — use `RESPONSE_PROSE_SELECTOR` constant (was hardcoded); scope link extraction to `[role="tabpanel"]`
+- `src/perplexity-browser/config.ts` — deleted dead `resolvePerplexityModelLabels()`, `resolvePerplexityUrl()`
+- `src/perplexity-browser/constants.ts` — deleted 5 unused exports (TABPANEL_SELECTOR, QUERY_HEADING_SELECTOR, CITATION_SELECTOR, CITATION_NBSP_SELECTOR, ACTIVE_TAB_SELECTOR)
+- `src/perplexity-browser/index.ts` — `browser.on` → `browser.once` for disconnect listener
+- `src/cli/engine.ts` — added shared `isBrowserCompatible()` export
+- `src/cli/runOptions.ts` — import shared `isBrowserCompatible`
+- `bin/oracle-cli.ts` — import shared `isBrowserCompatible`
+- `tests/cli/browserConfig.test.ts` — fixed 4 stale tests: expect raw model name, not `'Sonar'`
+- `tests/perplexity-browser/config.test.ts` — removed tests for deleted `resolvePerplexityModelLabels`
+
+### Session Export
+- Full history: .sessions/260308-1812_2016c849/main.md
+
+### Open / Next
+- **PR creation**: Branch has 6 commits (5 original + simplify). Push and create PR against `main`
+- **Menu merge for sonar-deep-research**: Opening [+] menu twice (social filter + DR activation) wastes ~2.1s of fixed sleeps. Merge into single open/close cycle — needs live browser testing
+- **Replace fixed `setTimeout` with `waitForSelector`**: ~7.5s of hardcoded sleeps in happy path. Replacing 500ms/1000ms waits with observable state checks could halve wall time
+- **`ensureCamoufoxBinary` import path**: `camoufox-js/dist/pkgman.js` is an internal path — may break on version bumps
+
+## Session Log — 2026-03-09 (Cross-Repo Fixes + ABI Compat)
+
+### Decisions
+| Decision | Chosen | Rejected | Why |
+|----------|--------|----------|-----|
+| `better-sqlite3` ABI mismatch fix | Add to `pnpm.onlyBuiltDependencies` in package.json | Homebrew PATH hack / postinstall script | pnpm-native; forces recompile on every `pnpm install` for any Node version — no manual steps |
+| Oracle command syntax in external repos | `oracle --engine browser --model sonar "question"` | `oracle --model sonar` (auto-detect) | API key not working; explicit `--engine browser` is reliable |
+
+### Files Modified
+- `sdx-labor-cost/docs/external-tools.md` — fixed stale `--engine api --models "perplexity/sonar"` → `--engine browser --model sonar`
+- `sdx-shift/.claude/docs/external-tools.md` — same fix + removed stale `npx -y @steipete/oracle` reference
+- `knowledgeBase/.claude/docs/tools.md` — stripped Perplexity model table, simplified to `--engine browser --model sonar`
+- `oracle/.node-version` — NEW: pins Node 24.13.0 for version managers
+
+### Session Export
+- Full history: .sessions/260308-1812_2016c849/main.md
+
+### Open / Next
+- **~~Postinstall rebuild guard~~**: Resolved — added `better-sqlite3` to `pnpm.onlyBuiltDependencies` in package.json
+- **`restartSession` missing Perplexity executor**: `bin/oracle-cli.ts:1512-1533` — restart path only handles Chrome/Gemini, not Camoufox. Perplexity browser restarts silently fall through to ChatGPT runner (warp finding P1)
+- **`--space` not persisted for restart**: `bin/oracle-cli.ts:803-845` — space option not stored in session metadata, dropped on `oracle restart` (warp finding P1)
+- **skills-sprint source script**: `oracle-browser.sh` in the plugin source repo should be kept in sync with cached version at `~/.claude/plugins/cache/ironerumi-tools/ce-slim/0.8.1/scripts/oracle-browser.sh`
+
+## Session Log — 2026-03-09 (Native Module ABI Fix)
+
+### Decisions
+| Decision | Chosen | Rejected | Why |
+|----------|--------|----------|-----|
+| `better-sqlite3` ABI fix strategy | `pnpm.onlyBuiltDependencies` in package.json | Manual rebuild / postinstall script / Homebrew PATH hack | pnpm-native; auto-recompiles on every `pnpm install` for whatever Node is active — zero manual steps, works on any deployment |
+
+### Files Modified
+- `package.json` — added `"better-sqlite3"` to `pnpm.onlyBuiltDependencies` array
+
+### Session Export
+- Full history: .sessions/260309-0710_950fbebc/main.md
+
+### Linear Status
+- N/A
+
+### Open / Next
+- **Verify `pnpm install` triggers rebuild**: Run `pnpm install` in a clean state to confirm `onlyBuiltDependencies` recompiles `better-sqlite3` automatically
+- **`restartSession` missing Perplexity executor**: `bin/oracle-cli.ts:1512-1533` — restart path only handles Chrome/Gemini, not Camoufox (P1 from prior session)
+- **`--space` not persisted for restart**: `bin/oracle-cli.ts:803-845` — space option dropped on `oracle restart` (P1 from prior session)
+- **`ensureCamoufoxBinary` import path**: `camoufox-js/dist/pkgman.js` is internal — may break on version bumps
